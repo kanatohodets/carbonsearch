@@ -13,8 +13,8 @@ import (
 )
 
 type HTTPConfig struct {
-	Port     int    `yaml: "port"`
-	Endpoint string `yaml: "endpoint"`
+	Port     int    `yaml:"port"`
+	Endpoint string `yaml:"endpoint"`
 }
 
 type HTTPConsumer struct {
