@@ -40,9 +40,11 @@ type Index struct {
 
 	tagToJoin map[string]map[string]bool
 	tagMutex  sync.RWMutex
+	tagCount  int
 
 	joinToMetric map[string]map[string]bool
 	metricMutex  sync.RWMutex
+	metricCount  int
 }
 
 func NewIndex(joinKey string) *Index {
@@ -70,7 +72,12 @@ func (i *Index) AddMetrics(join string, metrics []string) error {
 	}
 
 	for _, metric := range metrics {
-		metricIndex[metric] = true
+		_, ok := metricIndex[metric]
+		// this only needs to branch in order to avoid double-counting things
+		if !ok {
+			i.metricCount++
+			metricIndex[metric] = true
+		}
 	}
 
 	return nil
@@ -90,7 +97,12 @@ func (i *Index) AddTags(join string, tags []string) error {
 			tagIndex = make(map[string]bool)
 			i.tagToJoin[tag] = tagIndex
 		}
-		tagIndex[join] = true
+		_, ok = tagIndex[join]
+		// this only needs to branch in order to avoid double-counting things
+		if !ok {
+			i.tagCount++
+			tagIndex[join] = true
+		}
 	}
 
 	return nil
@@ -129,4 +141,18 @@ func (i *Index) Query(query []string) ([]string, error) {
 
 func (i *Index) Name() string {
 	return i.joinKey
+}
+
+func (i *Index) TagSize() int {
+	// or convert the sizes to atomics
+	i.tagMutex.RLock()
+	defer i.tagMutex.RUnlock()
+	return i.tagCount
+}
+
+func (i *Index) MetricSize() int {
+	// or convert the sizes to atomics
+	i.metricMutex.RLock()
+	defer i.metricMutex.RUnlock()
+	return i.metricCount
 }
