@@ -15,9 +15,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 )
@@ -108,10 +111,31 @@ func queryHandler(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "Path to the `config file`.")
+	blockingProfile := flag.String("blockProfile", "", "Path to `block profile output file`. Block profiler disabled if empty.")
+	cpuProfile := flag.String("cpuProfile", "", "Path to `cpu profile output file`. CPU profiler disabled if empty.")
 	flag.Parse()
 
 	if *configPath == "" {
 		printUsageErrorAndExit("Can't run without a config file")
+	}
+
+	if *blockingProfile != "" {
+		f, err := os.Create(*blockingProfile)
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+		runtime.SetBlockProfileRate(1)
+		defer f.Close()
+		defer pprof.Lookup("block").WriteTo(f, 1)
+	}
+
+	if *cpuProfile != "" {
+		f, err := os.Create(*cpuProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	type Config struct {
