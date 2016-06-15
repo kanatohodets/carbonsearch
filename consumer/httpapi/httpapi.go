@@ -20,6 +20,7 @@ type HTTPConfig struct {
 type HTTPConsumer struct {
 	port     int
 	endpoint string
+	wg       *sync.WaitGroup
 }
 
 func New(configPath string) (*HTTPConsumer, error) {
@@ -36,6 +37,8 @@ func New(configPath string) (*HTTPConsumer, error) {
 }
 
 func (h *HTTPConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
+	wg.Add(1)
+	h.wg = wg
 	go func() {
 		http.HandleFunc(h.endpoint+"/tag", func(w http.ResponseWriter, req *http.Request) {
 			payload, err := ioutil.ReadAll(req.Body)
@@ -112,6 +115,7 @@ func (h *HTTPConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 }
 
 func (h *HTTPConsumer) Stop() error {
+	h.wg.Done()
 	return nil
 }
 
