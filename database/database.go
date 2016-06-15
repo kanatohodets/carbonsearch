@@ -217,6 +217,8 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 			db.serviceIndexMutex.Lock()
 			db.serviceToIndex[service] = givenIndex
 			db.serviceIndexMutex.Unlock()
+
+			valid = append(valid, queryTag)
 		}
 	}
 
