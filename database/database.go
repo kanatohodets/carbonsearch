@@ -8,11 +8,13 @@ import (
 	"github.com/kanatohodets/carbonsearch/index/split"
 	"github.com/kanatohodets/carbonsearch/index/text"
 	"github.com/kanatohodets/carbonsearch/tag"
+	"github.com/kanatohodets/carbonsearch/util"
 	"log"
 	"sync"
 )
 
 type Database struct {
+	stats             *util.Stats
 	serviceToIndex    map[string]index.Index
 	serviceIndexMutex sync.RWMutex
 
@@ -156,10 +158,15 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 		return fmt.Errorf("could not/get create index for %s: %s", msg.Key, err)
 	}
 
+	db.stats.MetricMessages.Add(1)
+
 	err = index.AddMetrics(msg.Value, msg.Metrics)
 	if err != nil {
 		return fmt.Errorf("could not add metrics to metric side of index %q: %s", msg.Key, err)
 	}
+
+	db.stats.MetricsIndexed.Add(int64(len(msg.Metrics)))
+	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", index.Name()), util.ExpInt(index.MetricSize()))
 
 	return nil
 }
@@ -170,6 +177,8 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 		return fmt.Errorf("could not get/create index for %q: %s", msg.Key, err)
 	}
 
+	db.stats.TagMessages.Add(1)
+
 	validTags := db.validateServiceIndexPairs(msg.Tags, index)
 
 	err = index.AddTags(msg.Value, validTags)
@@ -177,16 +186,24 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 		return fmt.Errorf("could not add tags to tag side of index %q: %s", msg.Key, err)
 	}
 
+	db.stats.TagsIndexed.Add(int64(len(validTags)))
+	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags", index.Name()), util.ExpInt(index.TagSize()))
+
 	return nil
 }
 
 func (db *Database) InsertCustom(msg *m.TagMetric) error {
 	validTags := db.validateServiceIndexPairs(msg.Tags, db.FullIndex)
 
+	db.stats.CustomMessages.Add(1)
+
 	err := db.FullIndex.Add(validTags, msg.Metrics)
 	if err != nil {
 		return fmt.Errorf("error while adding to custom index: %s", err)
 	}
+
+	db.stats.FullIndexTags.Set(int64(db.FullIndex.TagSize()))
+	db.stats.FullIndexMetrics.Set(int64(db.FullIndex.MetricSize()))
 
 	return nil
 }
@@ -219,13 +236,15 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 			db.serviceIndexMutex.Unlock()
 
 			valid = append(valid, queryTag)
+
+			db.stats.ServicesByIndex.Set(service, util.ExpString(givenIndex.Name()))
 		}
 	}
 
 	return valid
 }
 
-func New() *Database {
+func New(stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
 	textIndex := text.NewIndex()
@@ -235,6 +254,7 @@ func New() *Database {
 	serviceToIndex["custom"] = fullIndex
 
 	return &Database{
+		stats:          stats,
 		serviceToIndex: serviceToIndex,
 
 		splitIndexes: make(map[string]*split.Index),

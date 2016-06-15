@@ -132,7 +132,7 @@ func main() {
 	stats = util.InitStats()
 
 	wg := &sync.WaitGroup{}
-	db = database.New()
+	db = database.New(stats)
 	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){

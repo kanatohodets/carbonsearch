@@ -2,11 +2,13 @@ package database
 
 import (
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
+	"github.com/kanatohodets/carbonsearch/util"
 	"testing"
 )
 
 func TestQuery(t *testing.T) {
-	db := New()
+	stats := util.InitStats()
+	db := New(stats)
 
 	batches := []*m.TagMetric{
 		&m.TagMetric{
