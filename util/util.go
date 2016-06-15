@@ -54,7 +54,8 @@ func (i ExpInt) String() string { return strconv.Itoa(int(i)) }
 
 type ExpString string
 
-func (s ExpString) String() string { return string(s) }
+// this needs to quote the string so the output can be JSONified
+func (s ExpString) String() string { return fmt.Sprintf("%q", string(s)) }
 
 func ReadConfig(path string, dest interface{}) error {
 	bytes, err := ioutil.ReadFile(path)
