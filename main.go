@@ -26,6 +26,8 @@ var buildVersion = "(development build)"
 
 var db *database.Database
 
+var stats *util.Stats
+
 func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 	/*
 		parse something like this:
@@ -66,6 +68,8 @@ func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 			return nil, err
 		}
 
+		stats.QueryTagsByService.Add(service, 1)
+
 		_, ok := tagsByService[service]
 		if !ok {
 			tagsByService[service] = []string{}
@@ -79,6 +83,8 @@ func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 func queryHandler(w http.ResponseWriter, req *http.Request) {
 	uri, _ := url.ParseRequestURI(req.URL.RequestURI())
 	uriQuery := uri.Query()
+
+	stats.QueriesHandled.Add(1)
 
 	queryTags, err := parseQuery(uriQuery)
 	if err != nil {
@@ -122,6 +128,8 @@ func main() {
 	if len(conf.Consumers) == 0 {
 		printErrorAndExit(1, "config doesn't have any consumers. carbonsearch won't have anything to search on. Take a peek in %q, see if it looks like it should", *configPath)
 	}
+
+	stats = util.InitStats()
 
 	wg := &sync.WaitGroup{}
 	db = database.New()
