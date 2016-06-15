@@ -114,7 +114,6 @@ func (k *KafkaConsumer) Name() string {
 func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
 		var msg *m.KeyMetric
-		log.Println("KEY METRIC MSG", string(kafkaMsg.Value))
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			log.Println("ermg decoding problem :( ", err)
 			continue
@@ -125,7 +124,6 @@ func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 
 func readTag(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
-		log.Println("KEY TAG MSG", string(kafkaMsg.Value))
 		var msg *m.KeyTag
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			log.Println("ermg decoding problem :( ", err)
@@ -137,7 +135,6 @@ func readTag(pc sarama.PartitionConsumer, db *database.Database) {
 
 func readCustom(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
-		log.Println("TAG METRIC MSG", string(kafkaMsg.Value))
 		var msg *m.TagMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			log.Println("ermg decoding problem :( ", err)
