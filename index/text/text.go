@@ -1,6 +1,7 @@
 package text
 
 import (
+	"github.com/kanatohodets/carbonsearch/index"
 	"strings"
 )
 
@@ -10,7 +11,7 @@ func NewIndex() *Index {
 	return &Index{}
 }
 
-func (i *Index) Query(tags []string) ([]string, error) {
+func (i *Index) Query(tags []index.Tag) ([]index.Metric, error) {
 	return nil, nil
 }
 

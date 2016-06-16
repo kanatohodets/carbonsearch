@@ -2,11 +2,12 @@ package full
 
 import (
 	"fmt"
+	"github.com/kanatohodets/carbonsearch/index"
 	"sync"
 )
 
 type Index struct {
-	index      map[string]map[string]bool
+	index      map[index.Tag]map[index.Metric]bool
 	mutex      sync.RWMutex
 	tagSize    int
 	metricSize int
@@ -14,11 +15,11 @@ type Index struct {
 
 func NewIndex() *Index {
 	return &Index{
-		index: make(map[string]map[string]bool),
+		index: make(map[index.Tag]map[index.Metric]bool),
 	}
 }
 
-func (i *Index) Add(tags []string, metrics []string) error {
+func (i *Index) Add(tags []index.Tag, metrics []index.Metric) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
@@ -34,7 +35,7 @@ func (i *Index) Add(tags []string, metrics []string) error {
 		associatedMetrics, ok := i.index[tag]
 		if !ok {
 			i.tagSize++
-			associatedMetrics = make(map[string]bool)
+			associatedMetrics = make(map[index.Metric]bool)
 			i.index[tag] = associatedMetrics
 		}
 		for _, metric := range metrics {
@@ -49,11 +50,11 @@ func (i *Index) Add(tags []string, metrics []string) error {
 	return nil
 }
 
-func (i *Index) Query(query []string) ([]string, error) {
+func (i *Index) Query(query []index.Tag) ([]index.Metric, error) {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
 
-	metricCounts := make(map[string]int)
+	metricCounts := make(map[index.Metric]int)
 	// get a slice of all the join keys (for example, hostnames) associated with these tags
 	for _, tag := range query {
 		// nil map -> empty range
@@ -62,7 +63,7 @@ func (i *Index) Query(query []string) ([]string, error) {
 		}
 	}
 
-	var result []string
+	var result []index.Metric
 	for key, count := range metricCounts {
 		if count == len(query) {
 			result = append(result, key)

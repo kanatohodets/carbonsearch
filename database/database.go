@@ -21,6 +21,9 @@ type Database struct {
 	splitIndexes map[string]*split.Index
 	splitMutex   sync.RWMutex
 
+	metrics      map[index.Metric]string
+	metricsMutex sync.RWMutex
+
 	FullIndex *full.Index
 	TextIndex *text.Index
 }
@@ -89,7 +92,7 @@ func (db *Database) GetSplitIndex(join string) *split.Index {
 */
 
 func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
-	queriesByIndex := map[index.Index][]string{}
+	queriesByIndex := map[index.Index][]index.Tag{}
 
 	db.serviceIndexMutex.RLock()
 	for service, tags := range tagsByService {
@@ -101,13 +104,14 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		}
 		_, ok = queriesByIndex[mappedIndex]
 		if !ok {
-			queriesByIndex[mappedIndex] = []string{}
+			queriesByIndex[mappedIndex] = []index.Tag{}
 		}
-		queriesByIndex[mappedIndex] = append(queriesByIndex[mappedIndex], tags...)
+		hashedTags := index.HashTags(tags)
+		queriesByIndex[mappedIndex] = append(queriesByIndex[mappedIndex], hashedTags...)
 	}
 	db.serviceIndexMutex.RUnlock()
 
-	metricCounts := make(map[string]int)
+	metricCounts := make(map[index.Metric]int)
 	setMembershipThreshold := 0
 
 	// query indexes, take intersection of metrics
@@ -130,11 +134,18 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		}
 	}
 
-	var metricSet []string
+	var metricSet []index.Metric
 	for metric, count := range metricCounts {
 		if count == setMembershipThreshold {
 			metricSet = append(metricSet, metric)
 		}
+	}
+
+	stringMetrics, err := db.unmapMetrics(metricSet)
+	// TODO(btyler): try to figure out how to annotate this error with better
+	// information, since just seeing a random int64 will not be very handy
+	if err != nil {
+		return nil, err
 	}
 
 	// TODO(btyler): 're-match' should hit a text index of all metric names,
@@ -142,62 +153,64 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	regexpTags, ok := tagsByService["re"]
 	if ok {
 		var err error
-		metricSet, err = db.TextIndex.Filter(regexpTags, metricSet)
+		stringMetrics, err = db.TextIndex.Filter(regexpTags, stringMetrics)
 		if err != nil {
 			return nil, fmt.Errorf("error while grepping: %s", err)
 		}
 	}
 
-	return metricSet, nil
+	return stringMetrics, nil
 }
 
 //TODO(btyler) -- do we want to auto-create indexes?
 func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
-	index, err := db.GetOrCreateSplitIndex(msg.Key)
+	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
 		return fmt.Errorf("could not/get create index for %s: %s", msg.Key, err)
 	}
 
 	db.stats.MetricMessages.Add(1)
 
-	err = index.AddMetrics(msg.Value, msg.Metrics)
+	metrics := db.mapMetrics(msg.Metrics)
+	err = si.AddMetrics(msg.Value, metrics)
 	if err != nil {
 		return fmt.Errorf("could not add metrics to metric side of index %q: %s", msg.Key, err)
 	}
 
-	db.stats.MetricsIndexed.Add(int64(len(msg.Metrics)))
-	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", index.Name()), util.ExpInt(index.MetricSize()))
+	db.stats.MetricsIndexed.Add(int64(len(metrics)))
+	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", si.Name()), util.ExpInt(si.MetricSize()))
 
 	return nil
 }
 
 func (db *Database) InsertTags(msg *m.KeyTag) error {
-	index, err := db.GetOrCreateSplitIndex(msg.Key)
+	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
 		return fmt.Errorf("could not get/create index for %q: %s", msg.Key, err)
 	}
 
 	db.stats.TagMessages.Add(1)
 
-	validTags := db.validateServiceIndexPairs(msg.Tags, index)
+	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, si))
 
-	err = index.AddTags(msg.Value, validTags)
+	err = si.AddTags(msg.Value, tags)
 	if err != nil {
 		return fmt.Errorf("could not add tags to tag side of index %q: %s", msg.Key, err)
 	}
 
-	db.stats.TagsIndexed.Add(int64(len(validTags)))
-	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags", index.Name()), util.ExpInt(index.TagSize()))
+	db.stats.TagsIndexed.Add(int64(len(tags)))
+	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags", si.Name()), util.ExpInt(si.TagSize()))
 
 	return nil
 }
 
 func (db *Database) InsertCustom(msg *m.TagMetric) error {
-	validTags := db.validateServiceIndexPairs(msg.Tags, db.FullIndex)
+	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, db.FullIndex))
 
 	db.stats.CustomMessages.Add(1)
 
-	err := db.FullIndex.Add(validTags, msg.Metrics)
+	metrics := db.mapMetrics(msg.Metrics)
+	err := db.FullIndex.Add(tags, metrics)
 	if err != nil {
 		return fmt.Errorf("error while adding to custom index: %s", err)
 	}
@@ -244,6 +257,38 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 	return valid
 }
 
+func (db *Database) mapMetrics(metrics []string) []index.Metric {
+	db.metricsMutex.Lock()
+	defer db.metricsMutex.Unlock()
+
+	hashed := make([]index.Metric, len(metrics))
+
+	for i, metric := range metrics {
+		hash := index.HashMetric(metric)
+		db.metrics[hash] = metric
+		hashed[i] = hash
+	}
+
+	return hashed
+}
+
+func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
+	db.metricsMutex.RLock()
+	defer db.metricsMutex.RUnlock()
+
+	stringMetrics := make([]string, len(metrics))
+
+	for i, metric := range metrics {
+		str, ok := db.metrics[metric]
+		if !ok {
+			return nil, fmt.Errorf("agh the hashed metric %q has no mapping back to a string! this is awful!", metric)
+		}
+		stringMetrics[i] = str
+	}
+
+	return stringMetrics, nil
+}
+
 func New(stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
@@ -258,6 +303,8 @@ func New(stats *util.Stats) *Database {
 		serviceToIndex: serviceToIndex,
 
 		splitIndexes: make(map[string]*split.Index),
+
+		metrics: make(map[index.Metric]string),
 
 		FullIndex: fullIndex,
 		TextIndex: textIndex,

@@ -32,17 +32,21 @@ the query process goes like this:
 
 import (
 	"fmt"
+	"github.com/kanatohodets/carbonsearch/index"
+	"github.com/kanatohodets/carbonsearch/util"
 	"sync"
 )
+
+type Join uint32
 
 type Index struct {
 	joinKey string
 
-	tagToJoin map[string]map[string]bool
+	tagToJoin map[index.Tag]map[Join]bool
 	tagMutex  sync.RWMutex
 	tagCount  int
 
-	joinToMetric map[string]map[string]bool
+	joinToMetric map[Join]map[index.Metric]bool
 	metricMutex  sync.RWMutex
 	metricCount  int
 }
@@ -51,23 +55,25 @@ func NewIndex(joinKey string) *Index {
 	return &Index{
 		joinKey: joinKey,
 
-		tagToJoin: make(map[string]map[string]bool),
+		tagToJoin: make(map[index.Tag]map[Join]bool),
 
-		joinToMetric: make(map[string]map[string]bool),
+		joinToMetric: make(map[Join]map[index.Metric]bool),
 	}
 }
 
-func (i *Index) AddMetrics(join string, metrics []string) error {
+func (i *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 	if len(metrics) == 0 {
-		return fmt.Errorf("cannot add 0 metrics to join %q", join)
+		return fmt.Errorf("cannot add 0 metrics to join %q", rawJoin)
 	}
+
+	join := HashJoin(rawJoin)
 
 	i.metricMutex.Lock()
 	defer i.metricMutex.Unlock()
 
 	metricIndex, ok := i.joinToMetric[join]
 	if !ok {
-		metricIndex = make(map[string]bool)
+		metricIndex = make(map[index.Metric]bool)
 		i.joinToMetric[join] = metricIndex
 	}
 
@@ -83,10 +89,12 @@ func (i *Index) AddMetrics(join string, metrics []string) error {
 	return nil
 }
 
-func (i *Index) AddTags(join string, tags []string) error {
+func (i *Index) AddTags(rawJoin string, tags []index.Tag) error {
 	if len(tags) == 0 {
-		return fmt.Errorf("cannot add 0 tags to join %q", join)
+		return fmt.Errorf("cannot add 0 tags to join %q", rawJoin)
 	}
+
+	join := HashJoin(rawJoin)
 
 	i.tagMutex.Lock()
 	defer i.tagMutex.Unlock()
@@ -94,7 +102,7 @@ func (i *Index) AddTags(join string, tags []string) error {
 	for _, tag := range tags {
 		tagIndex, ok := i.tagToJoin[tag]
 		if !ok {
-			tagIndex = make(map[string]bool)
+			tagIndex = make(map[Join]bool)
 			i.tagToJoin[tag] = tagIndex
 		}
 		_, ok = tagIndex[join]
@@ -108,8 +116,8 @@ func (i *Index) AddTags(join string, tags []string) error {
 	return nil
 }
 
-func (i *Index) Query(query []string) ([]string, error) {
-	joinKeyCounts := make(map[string]int)
+func (i *Index) Query(query []index.Tag) ([]index.Metric, error) {
+	joinKeyCounts := make(map[Join]int)
 	// get a slice of all the join keys (for example, hostnames) associated with these tags
 	i.tagMutex.RLock()
 	for _, tag := range query {
@@ -120,14 +128,14 @@ func (i *Index) Query(query []string) ([]string, error) {
 	i.tagMutex.RUnlock()
 
 	// pluck out the join keys present for every search tag (intersection)
-	var joinKeys []string
+	var joinKeys []Join
 	for key, count := range joinKeyCounts {
 		if count == len(query) {
 			joinKeys = append(joinKeys, key)
 		}
 	}
 
-	var metrics []string
+	var metrics []index.Metric
 	// now use those join keys to fetch out metrics
 	i.metricMutex.RLock()
 	for _, joinKey := range joinKeys {
@@ -155,4 +163,8 @@ func (i *Index) MetricSize() int {
 	i.metricMutex.RLock()
 	defer i.metricMutex.RUnlock()
 	return i.metricCount
+}
+
+func HashJoin(join string) Join {
+	return Join(util.HashStr32(join))
 }
