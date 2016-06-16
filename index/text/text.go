@@ -1,7 +1,6 @@
 package text
 
 import (
-	"regexp"
 	"strings"
 )
 
@@ -17,30 +16,23 @@ func (i *Index) Query(tags []string) ([]string, error) {
 
 // grep as a service. this is a placeholder for having a proper text index
 func (i *Index) Filter(tags []string, metrics []string) ([]string, error) {
-	patterns := []string{}
+	substrs := []string{}
 	for _, tag := range tags {
 		if strings.HasPrefix(tag, "text-filter:") {
-			regexp := strings.TrimPrefix(tag, "text-filter:")
-			patterns = append(patterns, regexp)
+			substr := strings.TrimPrefix(tag, "text-filter:")
+			substrs = append(substrs, substr)
 		}
 	}
 
-	// no regexp filters, return the whole thing
-	if len(patterns) == 0 {
+	// no substr filters, return the whole thing
+	if len(substrs) == 0 {
 		return metrics, nil
 	}
 
 	matchingMetrics := map[string]int{}
-	for _, pattern := range patterns {
-		re, err := regexp.Compile(pattern)
-		// bail out on any invalid pattern, don't partially match
-		if err != nil {
-			return nil, err
-		}
-
+	for _, substr := range substrs {
 		for _, metric := range metrics {
-			matched := re.MatchString(metric)
-			if matched {
+			if strings.Contains(metric, substr) {
 				matchingMetrics[metric]++
 			}
 		}
@@ -48,7 +40,7 @@ func (i *Index) Filter(tags []string, metrics []string) ([]string, error) {
 
 	result := []string{}
 	for metric, count := range matchingMetrics {
-		if count == len(patterns) {
+		if count == len(substrs) {
 			result = append(result, metric)
 		}
 	}

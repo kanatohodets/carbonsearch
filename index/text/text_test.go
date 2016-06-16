@@ -51,8 +51,8 @@ func TestFilter(t *testing.T) {
 
 	// two matching tags
 	twoMatchTags := []string{
-		"text-filter:^monitors",
-		"text-filter:still_happening$",
+		"text-filter:monitors",
+		"text-filter:still_happening",
 	}
 
 	filtered, err = index.Filter(twoMatchTags, metrics)
@@ -70,7 +70,7 @@ func TestFilter(t *testing.T) {
 
 	// non-matching tag
 	nonMatchingTag := []string{
-		"text-filter:^blorg",
+		"text-filter:blorg",
 	}
 
 	filtered, err = index.Filter(nonMatchingTag, metrics)
@@ -84,8 +84,8 @@ func TestFilter(t *testing.T) {
 
 	// two conflicting tags that each match some results, but no intersection
 	conflictMatchTags := []string{
-		"text-filter:^monitors",
-		"text-filter:^server",
+		"text-filter:monitors",
+		"text-filter:server",
 	}
 
 	filtered, err = index.Filter(conflictMatchTags, metrics)
