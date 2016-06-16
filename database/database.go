@@ -248,7 +248,7 @@ func New(stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
 	textIndex := text.NewIndex()
-	serviceToIndex["re"] = textIndex
+	serviceToIndex["text"] = textIndex
 
 	fullIndex := full.NewIndex()
 	serviceToIndex["custom"] = fullIndex

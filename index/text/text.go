@@ -19,8 +19,8 @@ func (i *Index) Query(tags []string) ([]string, error) {
 func (i *Index) Filter(tags []string, metrics []string) ([]string, error) {
 	patterns := []string{}
 	for _, tag := range tags {
-		if strings.HasPrefix(tag, "re-filter:") {
-			regexp := strings.TrimPrefix(tag, "re-filter:")
+		if strings.HasPrefix(tag, "text-filter:") {
+			regexp := strings.TrimPrefix(tag, "text-filter:")
 			patterns = append(patterns, regexp)
 		}
 	}
@@ -32,11 +32,14 @@ func (i *Index) Filter(tags []string, metrics []string) ([]string, error) {
 
 	matchingMetrics := map[string]int{}
 	for _, pattern := range patterns {
+		re, err := regexp.Compile(pattern)
+		// bail out on any invalid pattern, don't partially match
+		if err != nil {
+			return nil, err
+		}
+
 		for _, metric := range metrics {
-			matched, err := regexp.MatchString(pattern, metric)
-			if err != nil {
-				return nil, err
-			}
+			matched := re.MatchString(metric)
 			if matched {
 				matchingMetrics[metric]++
 			}
