@@ -37,7 +37,7 @@ import (
 	"sync"
 )
 
-type Join uint32
+type Join uint64
 
 type Index struct {
 	joinKey string
@@ -166,5 +166,5 @@ func (i *Index) MetricSize() int {
 }
 
 func HashJoin(join string) Join {
-	return Join(util.HashStr32(join))
+	return Join(util.HashStr64(join))
 }
