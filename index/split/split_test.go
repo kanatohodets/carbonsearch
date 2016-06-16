@@ -27,15 +27,15 @@ func TestQuery(t *testing.T) {
 
 	if len(result) == 1 {
 		if result[0] != index.HashMetric(metricName) {
-			t.Errorf("%v was not found in the index", metricName)
+			t.Errorf("split index test: %v was not found in the index", metricName)
 		}
 	} else {
-		t.Errorf("the index had %d search results. that value is wrong because it isn't 1", len(result))
+		t.Errorf("split index test: the index had %d search results. that value is wrong because it isn't 1", len(result))
 	}
 
 	emptyResult, err := in.Query(index.HashTags([]string{"blorgtag"}))
 	if len(emptyResult) != 0 {
-		t.Errorf("found some results on a bogus query: %v", emptyResult)
+		t.Errorf("split index test: found some results on a bogus query: %v", emptyResult)
 	}
 }
 

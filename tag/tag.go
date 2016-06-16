@@ -10,12 +10,12 @@ func Parse(tag string) (string, string, error) {
 	kvMarker := strings.Index(tag, ":")
 	hasDots := strings.Index(tag, ".")
 	if hasDots != -1 {
-		return "", "", fmt.Errorf("%q is an invalid tag: it contains full-stop characters, which will confuse graphite clients", tag)
+		return "", "", fmt.Errorf("tag: %q is an invalid tag: it contains full-stop characters, which will confuse graphite clients", tag)
 	}
 
 	// has a '-', has a ':', and the ':' has at least one character between it and the '-'
 	if serviceDelimiter == -1 || kvMarker == -1 || kvMarker < serviceDelimiter+1 {
-		return "", "", fmt.Errorf("%q is an invalid tag, should be: service-key:value", tag)
+		return "", "", fmt.Errorf("tag: %q is an invalid tag, should be: service-key:value", tag)
 	}
 
 	service := tag[0:serviceDelimiter]

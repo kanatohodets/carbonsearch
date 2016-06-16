@@ -63,7 +63,7 @@ func NewIndex(joinKey string) *Index {
 
 func (i *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 	if len(metrics) == 0 {
-		return fmt.Errorf("cannot add 0 metrics to join %q", rawJoin)
+		return fmt.Errorf("split index: cannot add 0 metrics to join %q", rawJoin)
 	}
 
 	join := HashJoin(rawJoin)
@@ -91,7 +91,7 @@ func (i *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 
 func (i *Index) AddTags(rawJoin string, tags []index.Tag) error {
 	if len(tags) == 0 {
-		return fmt.Errorf("cannot add 0 tags to join %q", rawJoin)
+		return fmt.Errorf("split index: cannot add 0 tags to join %q", rawJoin)
 	}
 
 	join := HashJoin(rawJoin)

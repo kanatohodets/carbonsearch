@@ -50,13 +50,13 @@ func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 	// zipper is the only thing communicating with this service
 	targets := uriQuery["target"]
 	if len(targets) != 1 {
-		return nil, fmt.Errorf("there must be exactly one 'target' url param")
+		return nil, fmt.Errorf("main: there must be exactly one 'target' url param")
 	}
 
 	target := targets[0]
 	validExp := strings.HasPrefix(target, "virt.v1.")
 	if !validExp {
-		return nil, fmt.Errorf("one of the targets is not a valid virtual metric (must start with 'virt.v1.'): %s", target)
+		return nil, fmt.Errorf("main: one of the targets is not a valid virtual metric (must start with 'virt.v1.'): %s", target)
 	}
 
 	raw := strings.TrimPrefix(target, "virt.v1.")

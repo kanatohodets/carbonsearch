@@ -47,7 +47,7 @@ func (db *Database) CreateSplitIndex(join string) (*split.Index, error) {
 
 	_, ok := db.splitIndexes[join]
 	if ok {
-		return nil, fmt.Errorf("index for key %s already exists", join)
+		return nil, fmt.Errorf("database: index for key %s already exists", join)
 	}
 
 	index := split.NewIndex(join)
@@ -126,7 +126,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 
 		metrics, err := targetIndex.Query(query)
 		if err != nil {
-			return nil, fmt.Errorf("error while querying index %s: %s", targetIndex.Name(), err)
+			return nil, fmt.Errorf("database: error while querying index %s: %s", targetIndex.Name(), err)
 		}
 
 		for _, metric := range metrics {
@@ -155,7 +155,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		var err error
 		stringMetrics, err = db.TextIndex.Filter(regexpTags, stringMetrics)
 		if err != nil {
-			return nil, fmt.Errorf("error while grepping: %s", err)
+			return nil, fmt.Errorf("database: error while grepping: %s", err)
 		}
 	}
 
@@ -166,7 +166,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
-		return fmt.Errorf("could not/get create index for %s: %s", msg.Key, err)
+		return fmt.Errorf("database: could not/get create index for %s: %s", msg.Key, err)
 	}
 
 	db.stats.MetricMessages.Add(1)
@@ -174,7 +174,7 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	metrics := db.mapMetrics(msg.Metrics)
 	err = si.AddMetrics(msg.Value, metrics)
 	if err != nil {
-		return fmt.Errorf("could not add metrics to metric side of index %q: %s", msg.Key, err)
+		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
 	}
 
 	db.stats.MetricsIndexed.Add(int64(len(metrics)))
@@ -186,7 +186,7 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 func (db *Database) InsertTags(msg *m.KeyTag) error {
 	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
-		return fmt.Errorf("could not get/create index for %q: %s", msg.Key, err)
+		return fmt.Errorf("database: could not get/create index for %q: %s", msg.Key, err)
 	}
 
 	db.stats.TagMessages.Add(1)
@@ -195,7 +195,7 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 
 	err = si.AddTags(msg.Value, tags)
 	if err != nil {
-		return fmt.Errorf("could not add tags to tag side of index %q: %s", msg.Key, err)
+		return fmt.Errorf("database: could not add tags to tag side of index %q: %s", msg.Key, err)
 	}
 
 	db.stats.TagsIndexed.Add(int64(len(tags)))
@@ -212,7 +212,7 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 	metrics := db.mapMetrics(msg.Metrics)
 	err := db.FullIndex.Add(tags, metrics)
 	if err != nil {
-		return fmt.Errorf("error while adding to custom index: %s", err)
+		return fmt.Errorf("database: error while adding to custom index: %s", err)
 	}
 
 	db.stats.FullIndexTags.Set(int64(db.FullIndex.TagSize()))
@@ -281,7 +281,7 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 	for i, metric := range metrics {
 		str, ok := db.metrics[metric]
 		if !ok {
-			return nil, fmt.Errorf("agh the hashed metric %q has no mapping back to a string! this is awful!", metric)
+			return nil, fmt.Errorf("database: the hashed metric '%d' has no mapping back to a string! this is awful!", metric)
 		}
 		stringMetrics[i] = str
 	}

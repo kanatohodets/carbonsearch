@@ -17,16 +17,16 @@ func TestParse(t *testing.T) {
 	for valid, expected := range validCases {
 		service, kv, err := Parse(valid)
 		if err != nil {
-			t.Errorf("'%s' failed to parse: %s", valid, err)
+			t.Errorf("tag test: %q failed to parse: %q", valid, err)
 			continue
 		}
 
 		if service != expected[0] {
-			t.Errorf("'%s' ought to have service '%s', but it has '%s' instead", valid, expected[0], service)
+			t.Errorf("tag test: %q ought to have service %q, but it has %q instead", valid, expected[0], service)
 		}
 
 		if kv != expected[1] {
-			t.Errorf("'%s' ought to have kv '%s', but it has '%s' instead", valid, expected[1], kv)
+			t.Errorf("tag test: %q ought to have kv %q, but it has %q instead", valid, expected[1], kv)
 		}
 	}
 
@@ -43,7 +43,7 @@ func TestParse(t *testing.T) {
 	for _, invalid := range invalidCases {
 		service, kv, err := Parse(invalid)
 		if err == nil {
-			t.Errorf("'%s' failed to error while parsing. tokens: '%s' '%s'", invalid, service, kv)
+			t.Errorf("tag test: %q failed to error while parsing. tokens: %q %q", invalid, service, kv)
 		}
 	}
 }

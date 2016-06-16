@@ -24,11 +24,11 @@ func (i *Index) Add(tags []index.Tag, metrics []index.Metric) error {
 	defer i.mutex.Unlock()
 
 	if len(metrics) == 0 {
-		return fmt.Errorf("can't associate tags with 0 metrics")
+		return fmt.Errorf("full index: can't associate tags with 0 metrics")
 	}
 
 	if len(tags) == 0 {
-		return fmt.Errorf("can't associate metrics with 0 tags")
+		return fmt.Errorf("full index: can't associate metrics with 0 tags")
 	}
 
 	for _, tag := range tags {

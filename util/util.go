@@ -61,12 +61,12 @@ func (s ExpString) String() string { return fmt.Sprintf("%q", string(s)) }
 func ReadConfig(path string, dest interface{}) error {
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		return fmt.Errorf("error while reading path %q: %s", path, err)
+		return fmt.Errorf("util: error while reading path %q: %s", path, err)
 	}
 
 	err = yaml.Unmarshal(bytes, dest)
 	if err != nil {
-		return fmt.Errorf("error parsing %q: %s", path, err)
+		return fmt.Errorf("util: error parsing %q: %s", path, err)
 	}
 	return nil
 }

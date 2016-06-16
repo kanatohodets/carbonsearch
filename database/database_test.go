@@ -55,14 +55,14 @@ func TestQuery(t *testing.T) {
 		found[metric] = true
 		_, ok := expectedMetrics[metric]
 		if !ok {
-			t.Errorf("found %q in the result, but we shouldn't have!", metric)
+			t.Errorf("database test: found %q in the result, but we shouldn't have!", metric)
 		}
 	}
 
 	for expected := range expectedMetrics {
 		_, ok := found[expected]
 		if !ok {
-			t.Errorf("expected to find %s in the query result, but it wasn't there!", expected)
+			t.Errorf("database test: expected to find %s in the query result, but it wasn't there!", expected)
 		}
 	}
 
@@ -77,7 +77,7 @@ func TestQuery(t *testing.T) {
 	}
 
 	if len(result) > 0 {
-		t.Errorf("query that expected 0 results got: %q", result)
+		t.Errorf("database test: query that expected 0 results got: %q", result)
 	}
 
 	// single result query
@@ -91,12 +91,12 @@ func TestQuery(t *testing.T) {
 	}
 
 	if len(result) != 1 {
-		t.Errorf("query that expected 1 result got: %q", result)
+		t.Errorf("database test: query that expected 1 result got: %q", result)
 		return
 	}
 
 	if result[0] != "monitors.was_the_site_up" {
-		t.Errorf("query %q expected only 'monitors.was_the_site_up', but got %q", query, result)
+		t.Errorf("database test: query %q expected only 'monitors.was_the_site_up', but got %q", query, result)
 		return
 	}
 	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes

@@ -40,12 +40,12 @@ func New(configPath string) (*KafkaConsumer, error) {
 	case "newest":
 		initialOffset = sarama.OffsetNewest
 	default:
-		return nil, fmt.Errorf("offset should be `oldest` or `newest`")
+		return nil, fmt.Errorf("kafka consumer: offset should be `oldest` or `newest`")
 	}
 
 	c, err := sarama.NewConsumer(config.BrokerList, nil)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create a consumer: %s", err)
+		return nil, fmt.Errorf("kafka consumer: Failed to create a consumer: %s", err)
 	}
 
 	partitionsByTopic := make(map[string][]int32)
@@ -73,7 +73,7 @@ func (k *KafkaConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 			pc, err := k.consumer.ConsumePartition(topic, partition, k.initialOffset)
 			if err != nil {
 				close(k.shutdown)
-				return fmt.Errorf("Failed to start consumer of topic %s for partition %d: %s", topic, partition, err)
+				return fmt.Errorf("kafka consumer: Failed to start consumer of topic %s for partition %d: %s", topic, partition, err)
 			}
 
 			wg.Add(1)
