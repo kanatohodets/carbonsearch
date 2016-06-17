@@ -34,10 +34,16 @@ import (
 	"fmt"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/util"
+	"sort"
 	"sync"
 )
 
 type Join uint64
+type JoinSlice []Join
+
+func (a JoinSlice) Len() int           { return len(a) }
+func (a JoinSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a JoinSlice) Less(i, j int) bool { return a[i] < a[j] }
 
 type Index struct {
 	joinKey string
@@ -167,4 +173,8 @@ func (i *Index) MetricSize() int {
 
 func HashJoin(join string) Join {
 	return Join(util.HashStr64(join))
+}
+
+func SortJoins(joins []Join) {
+	sort.Sort(JoinSlice(joins))
 }

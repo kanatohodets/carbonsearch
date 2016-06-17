@@ -2,9 +2,16 @@ package index
 
 import (
 	"github.com/kanatohodets/carbonsearch/util"
+	"sort"
 )
 
 type Metric uint64
+type MetricSlice []Metric
+
+func (a MetricSlice) Len() int           { return len(a) }
+func (a MetricSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a MetricSlice) Less(i, j int) bool { return a[i] < a[j] }
+
 type Tag uint64
 
 type Index interface {
@@ -34,4 +41,8 @@ func HashMetrics(metrics []string) []Metric {
 		result[i] = HashMetric(metric)
 	}
 	return result
+}
+
+func SortMetrics(metrics []Metric) {
+	sort.Sort(MetricSlice(metrics))
 }

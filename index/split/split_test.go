@@ -9,6 +9,40 @@ import (
 var seed int64 = 232342358902345
 var rnd *rand.Rand
 
+func TestSortJoins(t *testing.T) {
+	// make sure it doesn't error on a 0 item slice
+	joins := []Join{}
+	SortJoins(joins)
+
+	// 1 item
+	joins = []Join{HashJoin("foo")}
+	expectedFirst := joins[0]
+	SortJoins(joins)
+	if joins[0] != expectedFirst || len(joins) > 1 {
+		t.Errorf("index test: SortJoins wrecked a 1 item slice, somehow")
+		return
+	}
+
+	// create a deliberately unsorted 2 item list
+	joins = []Join{
+		HashJoin("foo"),
+		HashJoin("bar"),
+	}
+	a, b := joins[0], joins[1]
+	expectedFirst = a
+	if b > a {
+		joins = []Join{b, a}
+	} else {
+		expectedFirst = b
+	}
+
+	SortJoins(joins)
+	if joins[0] != expectedFirst {
+		t.Errorf("index test: SortJoins did not sort the slice: expected %v as first item, but got %v", expectedFirst, joins[0])
+	}
+
+}
+
 func TestQuery(t *testing.T) {
 	metricName := "server.hostname-1234"
 	host := "hostname-1234"
