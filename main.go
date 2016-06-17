@@ -31,6 +31,7 @@ var db *database.Database
 
 var stats *util.Stats
 
+// TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
 func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 	/*
 		parse something like this:
