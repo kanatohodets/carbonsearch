@@ -3,10 +3,11 @@ package util
 import (
 	"expvar"
 	"fmt"
-	"gopkg.in/yaml.v2"
-	"hash/fnv"
 	"io/ioutil"
 	"strconv"
+
+	"github.com/dchest/siphash"
+	"gopkg.in/yaml.v2"
 )
 
 type Stats struct {
@@ -71,14 +72,6 @@ func ReadConfig(path string, dest interface{}) error {
 	return nil
 }
 
-func HashStr32(data string) uint32 {
-	h := fnv.New32()
-	h.Write([]byte(data))
-	return h.Sum32()
-}
-
 func HashStr64(data string) uint64 {
-	h := fnv.New64()
-	h.Write([]byte(data))
-	return h.Sum64()
+	return siphash.Hash(0, 0, []byte(data))
 }
