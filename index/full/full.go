@@ -7,7 +7,7 @@ import (
 )
 
 type Index struct {
-	index      map[index.Tag]map[index.Metric]bool
+	index      map[index.Tag][]index.Metric
 	mutex      sync.RWMutex
 	tagSize    int
 	metricSize int
@@ -15,7 +15,7 @@ type Index struct {
 
 func NewIndex() *Index {
 	return &Index{
-		index: make(map[index.Tag]map[index.Metric]bool),
+		index: make(map[index.Tag][]index.Metric),
 	}
 }
 
@@ -35,17 +35,24 @@ func (i *Index) Add(tags []index.Tag, metrics []index.Metric) error {
 		associatedMetrics, ok := i.index[tag]
 		if !ok {
 			i.tagSize++
-			associatedMetrics = make(map[index.Metric]bool)
+			associatedMetrics = []index.Metric{}
 			i.index[tag] = associatedMetrics
 		}
+
+		existingMember := make(map[index.Metric]bool)
+		for _, metric := range associatedMetrics {
+			existingMember[metric] = true
+		}
+
 		for _, metric := range metrics {
-			_, ok = associatedMetrics[metric]
-			// this only needs to branch in order to avoid double-counting things
+			_, ok := existingMember[metric]
 			if !ok {
 				i.metricSize++
-				associatedMetrics[metric] = true
+				associatedMetrics = append(associatedMetrics, metric)
 			}
 		}
+		index.SortMetrics(associatedMetrics)
+		i.index[tag] = associatedMetrics
 	}
 	return nil
 }
@@ -54,23 +61,12 @@ func (i *Index) Query(query []index.Tag) ([]index.Metric, error) {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
 
-	metricCounts := make(map[index.Metric]int)
-	// get a slice of all the join keys (for example, hostnames) associated with these tags
-	for _, tag := range query {
-		// nil map -> empty range
-		for metric := range i.index[tag] {
-			metricCounts[metric]++
-		}
+	metricSets := make([][]index.Metric, len(query))
+	for pos, tag := range query {
+		metricSets[pos] = i.index[tag]
 	}
 
-	var result []index.Metric
-	for key, count := range metricCounts {
-		if count == len(query) {
-			result = append(result, key)
-		}
-	}
-
-	return result, nil
+	return index.IntersectMetrics(metricSets), nil
 }
 
 func (i *Index) Name() string {

@@ -31,6 +31,7 @@ the query process goes like this:
 */
 
 import (
+	"container/heap"
 	"fmt"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/util"
@@ -48,11 +49,11 @@ func (a JoinSlice) Less(i, j int) bool { return a[i] < a[j] }
 type Index struct {
 	joinKey string
 
-	tagToJoin map[index.Tag]map[Join]bool
+	tagToJoin map[index.Tag][]Join
 	tagMutex  sync.RWMutex
 	tagCount  int
 
-	joinToMetric map[Join]map[index.Metric]bool
+	joinToMetric map[Join][]index.Metric
 	metricMutex  sync.RWMutex
 	metricCount  int
 }
@@ -61,9 +62,9 @@ func NewIndex(joinKey string) *Index {
 	return &Index{
 		joinKey: joinKey,
 
-		tagToJoin: make(map[index.Tag]map[Join]bool),
+		tagToJoin: make(map[index.Tag][]Join),
 
-		joinToMetric: make(map[Join]map[index.Metric]bool),
+		joinToMetric: make(map[Join][]index.Metric),
 	}
 }
 
@@ -77,20 +78,28 @@ func (i *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 	i.metricMutex.Lock()
 	defer i.metricMutex.Unlock()
 
-	metricIndex, ok := i.joinToMetric[join]
+	metricList, ok := i.joinToMetric[join]
 	if !ok {
-		metricIndex = make(map[index.Metric]bool)
-		i.joinToMetric[join] = metricIndex
+		metricList = []index.Metric{}
+		i.joinToMetric[join] = metricList
+	}
+
+	existingMember := make(map[index.Metric]bool)
+
+	for _, metric := range metricList {
+		existingMember[metric] = true
 	}
 
 	for _, metric := range metrics {
-		_, ok := metricIndex[metric]
-		// this only needs to branch in order to avoid double-counting things
+		_, ok := existingMember[metric]
 		if !ok {
 			i.metricCount++
-			metricIndex[metric] = true
+			metricList = append(metricList, metric)
 		}
 	}
+
+	index.SortMetrics(metricList)
+	i.joinToMetric[join] = metricList
 
 	return nil
 }
@@ -106,50 +115,58 @@ func (i *Index) AddTags(rawJoin string, tags []index.Tag) error {
 	defer i.tagMutex.Unlock()
 
 	for _, tag := range tags {
-		tagIndex, ok := i.tagToJoin[tag]
-		if !ok {
-			tagIndex = make(map[Join]bool)
-			i.tagToJoin[tag] = tagIndex
-		}
-		_, ok = tagIndex[join]
-		// this only needs to branch in order to avoid double-counting things
+		joinList, ok := i.tagToJoin[tag]
 		if !ok {
 			i.tagCount++
-			tagIndex[join] = true
+			joinList = []Join{}
+			i.tagToJoin[tag] = joinList
 		}
+
+		found := false
+		for _, existingJoin := range joinList {
+			if existingJoin == join {
+				found = true
+			}
+		}
+
+		if !found {
+			joinList = append(joinList, join)
+		}
+		SortJoins(joinList)
+		i.tagToJoin[tag] = joinList
 	}
 
 	return nil
 }
 
 func (i *Index) Query(query []index.Tag) ([]index.Metric, error) {
-	joinKeyCounts := make(map[Join]int)
 	// get a slice of all the join keys (for example, hostnames) associated with these tags
+	joinLists := [][]Join{}
 	i.tagMutex.RLock()
 	for _, tag := range query {
-		for key := range i.tagToJoin[tag] {
-			joinKeyCounts[key]++
+		list, ok := i.tagToJoin[tag]
+		if ok {
+			joinLists = append(joinLists, list)
 		}
 	}
 	i.tagMutex.RUnlock()
 
-	// pluck out the join keys present for every search tag (intersection)
-	var joinKeys []Join
-	for key, count := range joinKeyCounts {
-		if count == len(query) {
-			joinKeys = append(joinKeys, key)
-		}
-	}
+	// intersect join keys
+	joinSet := IntersectJoins(joinLists)
 
-	var metrics []index.Metric
-	// now use those join keys to fetch out metrics
 	i.metricMutex.RLock()
-	for _, joinKey := range joinKeys {
-		for metric := range i.joinToMetric[joinKey] {
-			metrics = append(metrics, metric)
+	// deduplicated union all of the metrics associated with those join keys
+	metricSets := [][]index.Metric{}
+	for _, join := range joinSet {
+		list, ok := i.joinToMetric[join]
+		if ok {
+			metricSets = append(metricSets, list)
 		}
 	}
 	i.metricMutex.RUnlock()
+
+	// map keys -> slice. except these need to be sorted, blorg!
+	metrics := index.UnionMetrics(metricSets)
 	return metrics, nil
 }
 
@@ -175,6 +192,81 @@ func HashJoin(join string) Join {
 	return Join(util.HashStr64(join))
 }
 
+func HashJoins(joins []string) []Join {
+	result := make([]Join, len(joins))
+	for i, join := range joins {
+		result[i] = HashJoin(join)
+	}
+	return result
+}
+
 func SortJoins(joins []Join) {
 	sort.Sort(JoinSlice(joins))
+}
+
+type JoinSetsHeap [][]Join
+
+func (h JoinSetsHeap) Len() int           { return len(h) }
+func (h JoinSetsHeap) Less(i, j int) bool { return h[i][0] < h[j][0] }
+func (h JoinSetsHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *JoinSetsHeap) Push(x interface{}) {
+	t := x.([]Join)
+	*h = append(*h, t)
+}
+
+func (h *JoinSetsHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
+}
+
+func IntersectJoins(joinSets [][]Join) []Join {
+	if len(joinSets) == 0 {
+		return []Join{}
+	}
+
+	h := &JoinSetsHeap{}
+	heap.Init(h)
+	for _, list := range joinSets {
+		// any empty set --> empty intersection
+		if len(list) == 0 {
+			return []Join{}
+		}
+		heap.Push(h, list)
+	}
+	set := []Join{}
+	for {
+		cur := (*h)[0]
+		smallestJoin := cur[0]
+		present := 0
+		fixups := make([]bool, h.Len())
+		for i, candidate := range *h {
+			if candidate[0] <= smallestJoin {
+				fixups[i] = true
+			}
+			if candidate[0] == smallestJoin {
+				present++
+			}
+		}
+
+		// found something in every subset
+		if present == len(joinSets) {
+			if len(set) == 0 || set[len(set)-1] != smallestJoin {
+				set = append(set, smallestJoin)
+			}
+		}
+
+		for i, fix := range fixups {
+			if fix {
+				list := (*h)[i]
+				if len(list) == 1 {
+					return set
+				}
+				(*h)[i] = list[1:]
+				heap.Fix(h, i)
+			}
+		}
+	}
 }

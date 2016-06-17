@@ -130,3 +130,91 @@ func rwords(n int, wordMaxLen int) []string {
 func rchr() byte {
 	return alpha[rnd.Int()%26]
 }
+
+// TODO(btyler) consolidate this into a testing table
+func TestIntersectJoins(t *testing.T) {
+	// basic intersection
+	joins := [][]Join{
+		HashJoins([]string{"foo", "bar", "baz"}),
+		HashJoins([]string{"qux", "bar"}),
+		HashJoins([]string{"blorg", "bar"}),
+	}
+
+	for _, joinList := range joins {
+		SortJoins(joinList)
+	}
+
+	expectedList := HashJoins([]string{"bar"})
+	expected := map[Join]bool{}
+
+	for _, join := range expectedList {
+		expected[join] = false
+	}
+
+	intersection := IntersectJoins(joins)
+
+	for _, join := range intersection {
+		_, ok := expected[join]
+		if !ok {
+			t.Errorf("index test: join intersect included %v, which was not expected", join)
+			return
+		}
+		expected[join] = true
+	}
+
+	for join, found := range expected {
+		if !found {
+			t.Errorf("index test: join intersect did NOT include %v, which was expected to be there", join)
+		}
+	}
+
+	// empty intersection due to empty universe
+	intersection = IntersectJoins([][]Join{})
+	if len(intersection) > 0 {
+		t.Error("index test: join intersect on empty set returned non-empty")
+	}
+
+	// empty intersection due to one empty subset
+	joins = [][]Join{
+		HashJoins([]string{"foo", "bar", "baz"}),
+		HashJoins([]string{"qux", "bar"}),
+		HashJoins([]string{}),
+	}
+
+	for _, joinList := range joins {
+		SortJoins(joinList)
+	}
+	intersection = IntersectJoins(joins)
+	if len(intersection) > 0 {
+		t.Error("index test: join intersect returned non-empty, but it should have been empty")
+	}
+
+	// empty intersection due to no overlap
+	joins = [][]Join{
+		HashJoins([]string{"foo"}),
+		HashJoins([]string{"bar"}),
+		HashJoins([]string{"baz", "blorg", "buzz", "pow", "kablooie", "whizbang", "rain", "always rain"}),
+	}
+	for _, joinList := range joins {
+		SortJoins(joinList)
+	}
+	intersection = IntersectJoins(joins)
+	if len(intersection) > 0 {
+		t.Error("index test: join intersect returned non-empty, but it should have been empty")
+	}
+
+	// intersection of just one thing
+	joins = [][]Join{HashJoins([]string{"foo"})}
+	for _, joinList := range joins {
+		SortJoins(joinList)
+	}
+	intersection = IntersectJoins(joins)
+	if len(intersection) != 1 {
+		t.Error("index test: join intersect returned more than 1 result for a universe of 1")
+		return
+	}
+	if intersection[0] != joins[0][0] {
+		t.Error("index test: somehow a universe of 1 resulted in an intersection of 1, but not that 1. wtf o_o")
+		return
+	}
+}

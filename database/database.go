@@ -111,10 +111,8 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	}
 	db.serviceIndexMutex.RUnlock()
 
-	metricCounts := make(map[index.Metric]int)
-	setMembershipThreshold := 0
-
 	// query indexes, take intersection of metrics
+	metricSets := [][]index.Metric{}
 	for targetIndex, query := range queriesByIndex {
 		// TODO(btyler) -- text index isn't a proper index yet, but just
 		// a filter on the set that the other things spit out.
@@ -122,26 +120,17 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 			continue
 		}
 
-		setMembershipThreshold++
-
 		metrics, err := targetIndex.Query(query)
 		if err != nil {
 			return nil, fmt.Errorf("database: error while querying index %s: %s", targetIndex.Name(), err)
 		}
 
-		for _, metric := range metrics {
-			metricCounts[metric]++
-		}
+		metricSets = append(metricSets, metrics)
 	}
 
-	var metricSet []index.Metric
-	for metric, count := range metricCounts {
-		if count == setMembershipThreshold {
-			metricSet = append(metricSet, metric)
-		}
-	}
+	metrics := index.IntersectMetrics(metricSets)
 
-	stringMetrics, err := db.unmapMetrics(metricSet)
+	stringMetrics, err := db.unmapMetrics(metrics)
 	// TODO(btyler): try to figure out how to annotate this error with better
 	// information, since just seeing a random int64 will not be very handy
 	if err != nil {
@@ -230,7 +219,7 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 	for _, queryTag := range tags {
 		service, _, err := tag.Parse(queryTag)
 		if err != nil {
-			log.Println("tag parse error while validating service-tag pairs, skipping ", err)
+			log.Println("database: tag parse error while validating service-tag pairs, skipping ", err)
 			continue
 		}
 

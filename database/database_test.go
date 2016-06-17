@@ -78,6 +78,7 @@ func TestQuery(t *testing.T) {
 
 	if len(result) > 0 {
 		t.Errorf("database test: query that expected 0 results got: %q", result)
+		return
 	}
 
 	// single result query
