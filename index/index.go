@@ -116,13 +116,12 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 		cur := (*h)[0]
 		smallestMetric := cur[0]
 		present := 0
-		fixups := make([]bool, h.Len())
-		for i, candidate := range *h {
-			if candidate[0] <= smallestMetric {
-				fixups[i] = true
-			}
+		for _, candidate := range *h {
 			if candidate[0] == smallestMetric {
 				present++
+			} else {
+				// any further matches will be purged by the fixup loop
+				break
 			}
 		}
 
@@ -133,15 +132,14 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 			}
 		}
 
-		for i, fix := range fixups {
-			if fix {
-				list := (*h)[i]
-				if len(list) == 1 {
-					return set
-				}
-				(*h)[i] = list[1:]
-				heap.Fix(h, i)
+		for (*h)[0][0] == smallestMetric {
+			list := (*h)[0]
+			if len(list) == 1 {
+				return set
 			}
+
+			(*h)[0] = list[1:]
+			heap.Fix(h, 0)
 		}
 	}
 }
@@ -214,13 +212,12 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 		cur := (*h)[0]
 		smallestTag := cur[0]
 		present := 0
-		fixups := make([]bool, h.Len())
-		for i, candidate := range *h {
-			if candidate[0] <= smallestTag {
-				fixups[i] = true
-			}
+		for _, candidate := range *h {
 			if candidate[0] == smallestTag {
 				present++
+			} else {
+				// any further matches will be purged by the fixup loop
+				break
 			}
 		}
 
@@ -231,15 +228,14 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 			}
 		}
 
-		for i, fix := range fixups {
-			if fix {
-				list := (*h)[i]
-				if len(list) == 1 {
-					return set
-				}
-				(*h)[i] = list[1:]
-				heap.Fix(h, i)
+		for (*h)[0][0] == smallestTag {
+			list := (*h)[0]
+			if len(list) == 1 {
+				return set
 			}
+
+			(*h)[0] = list[1:]
+			heap.Fix(h, 0)
 		}
 	}
 }

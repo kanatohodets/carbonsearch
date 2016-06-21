@@ -241,13 +241,12 @@ func IntersectJoins(joinSets [][]Join) []Join {
 		cur := (*h)[0]
 		smallestJoin := cur[0]
 		present := 0
-		fixups := make([]bool, h.Len())
-		for i, candidate := range *h {
-			if candidate[0] <= smallestJoin {
-				fixups[i] = true
-			}
+		for _, candidate := range *h {
 			if candidate[0] == smallestJoin {
 				present++
+			} else {
+				// any further matches will be purged by the fixup loop
+				break
 			}
 		}
 
@@ -258,15 +257,14 @@ func IntersectJoins(joinSets [][]Join) []Join {
 			}
 		}
 
-		for i, fix := range fixups {
-			if fix {
-				list := (*h)[i]
-				if len(list) == 1 {
-					return set
-				}
-				(*h)[i] = list[1:]
-				heap.Fix(h, i)
+		for (*h)[0][0] == smallestJoin {
+			list := (*h)[0]
+			if len(list) == 1 {
+				return set
 			}
+
+			(*h)[0] = list[1:]
+			heap.Fix(h, 0)
 		}
 	}
 }
