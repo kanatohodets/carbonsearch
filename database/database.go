@@ -139,10 +139,10 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 
 	// TODO(btyler): 're-match' should hit a text index of all metric names,
 	// while 're-filter' should be the last-step filtering that it currently does.
-	regexpTags, ok := tagsByService["re"]
+	textTags, ok := tagsByService["text"]
 	if ok {
 		var err error
-		stringMetrics, err = db.TextIndex.Filter(regexpTags, stringMetrics)
+		stringMetrics, err = db.TextIndex.Filter(textTags, stringMetrics)
 		if err != nil {
 			return nil, fmt.Errorf("database: error while grepping: %s", err)
 		}
