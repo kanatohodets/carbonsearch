@@ -28,6 +28,9 @@ func TestQuery(t *testing.T) {
 	}
 
 	emptyResult, err := in.Query(index.HashTags([]string{"blorgtag"}))
+	if err != nil {
+		t.Errorf("error querying blorgtag: %v", err)
+	}
 	if len(emptyResult) != 0 {
 		t.Errorf("full index text: found some results on a bogus query: %v", emptyResult)
 	}
