@@ -11,15 +11,15 @@ func TestQuery(t *testing.T) {
 	db := New(stats)
 
 	batches := []*m.TagMetric{
-		&m.TagMetric{
+		{
 			Tags:    []string{"custom-favorites:tester", "custom-foo:bar"},
 			Metrics: []string{"monitors.was_the_site_up", "server.hostname-1234.cpu.loadavg"},
 		},
-		&m.TagMetric{
+		{
 			Tags:    []string{"custom-dislikedByUser:jane", "custom-quux:argh"},
 			Metrics: []string{"user.messing_around_in_test", "monitors.nginx.http.daily"},
 		},
-		&m.TagMetric{
+		{
 			Tags:    []string{"custom-dislikedByUser:jane"},
 			Metrics: []string{"monitors.was_the_site_up"},
 		},
@@ -35,7 +35,7 @@ func TestQuery(t *testing.T) {
 
 	// standard query
 	query := map[string][]string{
-		"custom": []string{"custom-dislikedByUser:jane"},
+		"custom": {"custom-dislikedByUser:jane"},
 	}
 
 	result, err := db.Query(query)
@@ -68,7 +68,7 @@ func TestQuery(t *testing.T) {
 
 	// zero result query
 	query = map[string][]string{
-		"custom": []string{"custom-favorites:tester", "custom-quux:arg"},
+		"custom": {"custom-favorites:tester", "custom-quux:arg"},
 	}
 	result, err = db.Query(query)
 	if err != nil {
@@ -83,7 +83,7 @@ func TestQuery(t *testing.T) {
 
 	// single result query
 	query = map[string][]string{
-		"custom": []string{"custom-favorites:tester", "custom-dislikedByUser:jane"},
+		"custom": {"custom-favorites:tester", "custom-dislikedByUser:jane"},
 	}
 	result, err = db.Query(query)
 	if err != nil {

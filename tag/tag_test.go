@@ -6,12 +6,12 @@ import (
 
 func TestParse(t *testing.T) {
 	validCases := map[string][]string{
-		"server-state:live":                          []string{"server", "state:live"},
-		"discovery-status:live":                      []string{"discovery", "status:live"},
-		"server-dc:lhr":                              []string{"server", "dc:lhr"},
-		"lb-pool:www":                                []string{"lb", "pool:www"},
-		"custom-favorites:btyler":                    []string{"custom", "favorites:btyler"},
-		"server-interfaces:eth1:ip_address:10_1_2_3": []string{"server", "interfaces:eth1:ip_address:10_1_2_3"},
+		"server-state:live":                          {"server", "state:live"},
+		"discovery-status:live":                      {"discovery", "status:live"},
+		"server-dc:lhr":                              {"server", "dc:lhr"},
+		"lb-pool:www":                                {"lb", "pool:www"},
+		"custom-favorites:btyler":                    {"custom", "favorites:btyler"},
+		"server-interfaces:eth1:ip_address:10_1_2_3": {"server", "interfaces:eth1:ip_address:10_1_2_3"},
 	}
 
 	for valid, expected := range validCases {
