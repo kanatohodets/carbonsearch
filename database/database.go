@@ -18,6 +18,8 @@ type Database struct {
 	serviceToIndex    map[string]index.Index
 	serviceIndexMutex sync.RWMutex
 
+	queryLimit int
+
 	splitIndexes map[string]*split.Index
 	splitMutex   sync.RWMutex
 
@@ -146,6 +148,10 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("database: error while grepping: %s", err)
 		}
+	}
+
+	if len(stringMetrics) > db.queryLimit {
+		return nil, fmt.Errorf("database: query selected %d metrics, which is over the limit of %d results in a single query", len(stringMetrics), db.queryLimit)
 	}
 
 	return stringMetrics, nil
@@ -278,7 +284,7 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 	return stringMetrics, nil
 }
 
-func New(stats *util.Stats) *Database {
+func New(queryLimit int, stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
 	textIndex := text.NewIndex()
@@ -290,6 +296,7 @@ func New(stats *util.Stats) *Database {
 	return &Database{
 		stats:          stats,
 		serviceToIndex: serviceToIndex,
+		queryLimit:     queryLimit,
 
 		splitIndexes: make(map[string]*split.Index),
 

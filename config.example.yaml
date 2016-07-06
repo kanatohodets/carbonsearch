@@ -1,6 +1,7 @@
 # where the daemon will serve queries from
 port: 8090
-
+# the maximum number of metrics that a query can return. if a query selects more metrics, it is an error
+query_limit: 20000
 # adding a line to 'consumers' implies that carbonsearch should use this consumer.
 # the value should be the absolute path to the config file for that consumer type
 consumers:

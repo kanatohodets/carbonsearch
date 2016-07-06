@@ -3,12 +3,20 @@ package database
 import (
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/util"
+	"os"
 	"testing"
 )
 
+var stats *util.Stats
+
+func TestMain(m *testing.M) {
+	stats = util.InitStats()
+	os.Exit(m.Run())
+}
+
 func TestQuery(t *testing.T) {
-	stats := util.InitStats()
-	db := New(stats)
+	queryLimit := 10
+	db := New(queryLimit, stats)
 
 	batches := []*m.TagMetric{
 		{
@@ -101,6 +109,42 @@ func TestQuery(t *testing.T) {
 		return
 	}
 	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes
+}
+
+func TestTooBigQuery(t *testing.T) {
+	queryLimit := 1
+	db := New(queryLimit, stats)
+
+	batches := []*m.TagMetric{
+		{
+			Tags:    []string{"custom-favorites:tester"},
+			Metrics: []string{"monitors.was_the_site_up", "server.hostname-1234.cpu.loadavg"},
+		},
+	}
+
+	for _, batch := range batches {
+		err := db.InsertCustom(batch)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+	}
+
+	// standard query
+	query := map[string][]string{
+		"custom": {"custom-favorites:tester"},
+	}
+
+	results, err := db.Query(query)
+	if err == nil {
+		t.Errorf("database test: should have errored by claiming the query wasn't selective enough, but instead it worked and returned %q", results)
+		return
+	}
+
+	if err.Error() != "database: query selected 2 metrics, which is over the limit of 1 results in a single query" {
+		t.Errorf("database test: expected an error about metric result set size, got %q instead", err)
+		return
+	}
 }
 
 func TestInsertMetrics(t *testing.T) {

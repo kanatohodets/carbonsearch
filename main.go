@@ -140,8 +140,9 @@ func main() {
 	}
 
 	type Config struct {
-		Port      int               `yaml:"port"`
-		Consumers map[string]string `yaml:"consumers"`
+		Port       int               `yaml:"port"`
+		QueryLimit int               `yaml:"query_limit"`
+		Consumers  map[string]string `yaml:"consumers"`
 	}
 
 	conf := &Config{}
@@ -157,7 +158,7 @@ func main() {
 	stats = util.InitStats()
 
 	wg := &sync.WaitGroup{}
-	db = database.New(stats)
+	db = database.New(conf.QueryLimit, stats)
 	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){
