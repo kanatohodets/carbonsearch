@@ -68,20 +68,20 @@ func NewIndex(joinKey string) *Index {
 	}
 }
 
-func (i *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
+func (si *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 	if len(metrics) == 0 {
 		return fmt.Errorf("split index: cannot add 0 metrics to join %q", rawJoin)
 	}
 
 	join := HashJoin(rawJoin)
 
-	i.metricMutex.Lock()
-	defer i.metricMutex.Unlock()
+	si.metricMutex.Lock()
+	defer si.metricMutex.Unlock()
 
-	metricList, ok := i.joinToMetric[join]
+	metricList, ok := si.joinToMetric[join]
 	if !ok {
 		metricList = []index.Metric{}
-		i.joinToMetric[join] = metricList
+		si.joinToMetric[join] = metricList
 	}
 
 	existingMember := make(map[index.Metric]bool)
@@ -93,33 +93,33 @@ func (i *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 	for _, metric := range metrics {
 		_, ok := existingMember[metric]
 		if !ok {
-			i.metricCount++
+			si.metricCount++
 			metricList = append(metricList, metric)
 		}
 	}
 
 	index.SortMetrics(metricList)
-	i.joinToMetric[join] = metricList
+	si.joinToMetric[join] = metricList
 
 	return nil
 }
 
-func (i *Index) AddTags(rawJoin string, tags []index.Tag) error {
+func (si *Index) AddTags(rawJoin string, tags []index.Tag) error {
 	if len(tags) == 0 {
 		return fmt.Errorf("split index: cannot add 0 tags to join %q", rawJoin)
 	}
 
 	join := HashJoin(rawJoin)
 
-	i.tagMutex.Lock()
-	defer i.tagMutex.Unlock()
+	si.tagMutex.Lock()
+	defer si.tagMutex.Unlock()
 
 	for _, tag := range tags {
-		joinList, ok := i.tagToJoin[tag]
+		joinList, ok := si.tagToJoin[tag]
 		if !ok {
-			i.tagCount++
+			si.tagCount++
 			joinList = []Join{}
-			i.tagToJoin[tag] = joinList
+			si.tagToJoin[tag] = joinList
 		}
 
 		found := false
@@ -133,59 +133,59 @@ func (i *Index) AddTags(rawJoin string, tags []index.Tag) error {
 			joinList = append(joinList, join)
 		}
 		SortJoins(joinList)
-		i.tagToJoin[tag] = joinList
+		si.tagToJoin[tag] = joinList
 	}
 
 	return nil
 }
 
-func (i *Index) Query(query []index.Tag) ([]index.Metric, error) {
+func (si *Index) Query(query []index.Tag) ([]index.Metric, error) {
 	// get a slice of all the join keys (for example, hostnames) associated with these tags
 	joinLists := [][]Join{}
-	i.tagMutex.RLock()
+	si.tagMutex.RLock()
 	for _, tag := range query {
-		list, ok := i.tagToJoin[tag]
+		list, ok := si.tagToJoin[tag]
 		if ok {
 			joinLists = append(joinLists, list)
 		}
 	}
-	i.tagMutex.RUnlock()
+	si.tagMutex.RUnlock()
 
 	// intersect join keys
 	joinSet := IntersectJoins(joinLists)
 
-	i.metricMutex.RLock()
+	si.metricMutex.RLock()
 	// deduplicated union all of the metrics associated with those join keys
 	metricSets := [][]index.Metric{}
 	for _, join := range joinSet {
-		list, ok := i.joinToMetric[join]
+		list, ok := si.joinToMetric[join]
 		if ok {
 			metricSets = append(metricSets, list)
 		}
 	}
-	i.metricMutex.RUnlock()
+	si.metricMutex.RUnlock()
 
 	// map keys -> slice. except these need to be sorted, blorg!
 	metrics := index.UnionMetrics(metricSets)
 	return metrics, nil
 }
 
-func (i *Index) Name() string {
-	return i.joinKey
+func (si *Index) Name() string {
+	return si.joinKey
 }
 
-func (i *Index) TagSize() int {
+func (si *Index) TagSize() int {
 	// or convert the sizes to atomics
-	i.tagMutex.RLock()
-	defer i.tagMutex.RUnlock()
-	return i.tagCount
+	si.tagMutex.RLock()
+	defer si.tagMutex.RUnlock()
+	return si.tagCount
 }
 
-func (i *Index) MetricSize() int {
+func (si *Index) MetricSize() int {
 	// or convert the sizes to atomics
-	i.metricMutex.RLock()
-	defer i.metricMutex.RUnlock()
-	return i.metricCount
+	si.metricMutex.RLock()
+	defer si.metricMutex.RUnlock()
+	return si.metricCount
 }
 
 func HashJoin(join string) Join {
