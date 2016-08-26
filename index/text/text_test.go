@@ -97,26 +97,24 @@ func TestFilter(t *testing.T) {
 	}
 }
 
-func strig(str string) trigram {
+func strigram(str string) trigram {
 	if len(str) != 3 {
 		panic("stringTrigram needs strings of length 3")
 	}
 	var b [3]byte
-	for i := 0; i < 3; i++ {
-		b[i] = str[i]
-	}
+	copy(b[:], str)
 	return trigramize(b)
 }
 
 func TestTokenize(t *testing.T) {
 	input := "foobar"
 	expected := []trigram{
-		strig("^fo"),
-		strig("foo"),
-		strig("oob"),
-		strig("oba"),
-		strig("bar"),
-		strig("ar$"),
+		strigram("^fo"),
+		strigram("foo"),
+		strigram("oob"),
+		strigram("oba"),
+		strigram("bar"),
+		strigram("ar$"),
 	}
 
 	tokens, err := tokenizeWithMarkers(input)
@@ -164,7 +162,7 @@ func addMetricTestCase(t *testing.T, testName string, in *Index, metrics []strin
 	}
 
 	for token, expectedCount := range testTokens {
-		trig := strig(token)
+		trig := strigram(token)
 		count, err := tokenCount(in, trig)
 		if err != nil {
 			t.Errorf("add metrics test '%s' TokenCount for token %v returned an error: %v", testName, token, err)
