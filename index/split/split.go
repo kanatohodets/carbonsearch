@@ -227,21 +227,21 @@ func IntersectJoins(joinSets [][]Join) []Join {
 		return []Join{}
 	}
 
-	h := &JoinSetsHeap{}
-	heap.Init(h)
 	for _, list := range joinSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return []Join{}
 		}
-		heap.Push(h, list)
 	}
+
+	h := JoinSetsHeap(joinSets)
+	heap.Init(&h)
 	set := []Join{}
 	for {
-		cur := (*h)[0]
+		cur := h[0]
 		smallestJoin := cur[0]
 		present := 0
-		for _, candidate := range *h {
+		for _, candidate := range h {
 			if candidate[0] == smallestJoin {
 				present++
 			} else {
@@ -257,14 +257,14 @@ func IntersectJoins(joinSets [][]Join) []Join {
 			}
 		}
 
-		for (*h)[0][0] == smallestJoin {
-			list := (*h)[0]
+		for h[0][0] == smallestJoin {
+			list := h[0]
 			if len(list) == 1 {
 				return set
 			}
 
-			(*h)[0] = list[1:]
-			heap.Fix(h, 0)
+			h[0] = list[1:]
+			heap.Fix(&h, 0)
 		}
 	}
 }

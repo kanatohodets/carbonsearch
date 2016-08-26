@@ -100,7 +100,7 @@ func BenchmarkLargesetQuery(b *testing.B) {
 	hosts := rwords(100, 40)
 	queryTerms := []string{}
 	for _, host := range hosts {
-		in.AddMetrics(host, index.HashMetrics(rwords(5000, 100)))
+		in.AddMetrics(host, index.HashMetrics(rwords(1000, 100)))
 		tags := rwords(10, 30)
 		if rnd.Intn(15) == 1 {
 			queryTerms = append(queryTerms, tags[rnd.Int()%len(tags)])

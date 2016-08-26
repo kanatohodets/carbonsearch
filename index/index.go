@@ -72,26 +72,20 @@ func (h *MetricSetsHeap) Pop() interface{} {
 }
 
 func UnionMetrics(metricSets [][]Metric) []Metric {
-	h := &MetricSetsHeap{}
-	heap.Init(h)
-	for _, list := range metricSets {
-		// empty sets have nothing to add to the union
-		if len(list) > 0 {
-			heap.Push(h, list)
-		}
-	}
+	h := MetricSetsHeap(metricSets)
+	heap.Init(&h)
 	set := []Metric{}
 	for h.Len() > 0 {
-		cur := (*h)[0]
+		cur := h[0]
 		metric := cur[0]
 		if len(set) == 0 || set[len(set)-1] != metric {
 			set = append(set, metric)
 		}
 		if len(cur) == 1 {
-			heap.Pop(h)
+			heap.Pop(&h)
 		} else {
-			(*h)[0] = cur[1:]
-			heap.Fix(h, 0)
+			h[0] = cur[1:]
+			heap.Fix(&h, 0)
 		}
 	}
 	return set
@@ -102,21 +96,21 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 		return []Metric{}
 	}
 
-	h := &MetricSetsHeap{}
-	heap.Init(h)
 	for _, list := range metricSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return []Metric{}
 		}
-		heap.Push(h, list)
 	}
+
+	h := MetricSetsHeap(metricSets)
+	heap.Init(&h)
 	set := []Metric{}
 	for {
-		cur := (*h)[0]
+		cur := h[0]
 		smallestMetric := cur[0]
 		present := 0
-		for _, candidate := range *h {
+		for _, candidate := range h {
 			if candidate[0] == smallestMetric {
 				present++
 			} else {
@@ -132,14 +126,14 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 			}
 		}
 
-		for (*h)[0][0] == smallestMetric {
-			list := (*h)[0]
+		for h[0][0] == smallestMetric {
+			list := h[0]
 			if len(list) == 1 {
 				return set
 			}
 
-			(*h)[0] = list[1:]
-			heap.Fix(h, 0)
+			h[0] = list[1:]
+			heap.Fix(&h, 0)
 		}
 	}
 }
@@ -168,26 +162,20 @@ func (h *TagSetsHeap) Pop() interface{} {
 
 //TODO(btyler) can we keep the benefits of distinct tag/metric types without the copypasta?
 func UnionTags(tagSets [][]Tag) []Tag {
-	h := &TagSetsHeap{}
-	heap.Init(h)
-	for _, list := range tagSets {
-		// empty sets have nothing to add to the union
-		if len(list) > 0 {
-			heap.Push(h, list)
-		}
-	}
+	h := TagSetsHeap(tagSets)
+	heap.Init(&h)
 	set := []Tag{}
 	for h.Len() > 0 {
-		cur := (*h)[0]
+		cur := h[0]
 		tag := cur[0]
 		if len(set) == 0 || set[len(set)-1] != tag {
 			set = append(set, tag)
 		}
 		if len(cur) == 1 {
-			heap.Pop(h)
+			heap.Pop(&h)
 		} else {
-			(*h)[0] = cur[1:]
-			heap.Fix(h, 0)
+			h[0] = cur[1:]
+			heap.Fix(&h, 0)
 		}
 	}
 	return set
@@ -198,21 +186,21 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 		return []Tag{}
 	}
 
-	h := &TagSetsHeap{}
-	heap.Init(h)
 	for _, list := range tagSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return []Tag{}
 		}
-		heap.Push(h, list)
 	}
+
+	h := TagSetsHeap(tagSets)
+	heap.Init(&h)
 	set := []Tag{}
 	for {
-		cur := (*h)[0]
+		cur := h[0]
 		smallestTag := cur[0]
 		present := 0
-		for _, candidate := range *h {
+		for _, candidate := range h {
 			if candidate[0] == smallestTag {
 				present++
 			} else {
@@ -228,14 +216,14 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 			}
 		}
 
-		for (*h)[0][0] == smallestTag {
-			list := (*h)[0]
+		for h[0][0] == smallestTag {
+			list := h[0]
 			if len(list) == 1 {
 				return set
 			}
 
-			(*h)[0] = list[1:]
-			heap.Fix(h, 0)
+			h[0] = list[1:]
+			heap.Fix(&h, 0)
 		}
 	}
 }
