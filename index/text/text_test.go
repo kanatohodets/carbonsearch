@@ -2,6 +2,7 @@ package text
 
 import (
 	"github.com/kanatohodets/carbonsearch/index"
+	"github.com/kanatohodets/carbonsearch/util/test"
 	"testing"
 )
 
@@ -257,7 +258,23 @@ func tokenCount(ti *Index, token trigram) (int, error) {
 		return 0, nil
 	}
 
-	return post.count, nil
+	return len(post.list), nil
+}
+
+func BenchmarkAddMetrics(b *testing.B) {
+	in := NewIndex()
+
+	metricCases := make([][]string, b.N)
+	hashCases := make([][]index.Metric, b.N)
+	for i := 0; i < b.N; i++ {
+		metricCases[i] = test.GetMetricCorpus(10)
+		hashCases[i] = index.HashMetrics(metricCases[i])
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		in.AddMetrics(metricCases[i], hashCases[i])
+	}
 }
 
 func BenchmarkSearchWithResults(b *testing.B) {

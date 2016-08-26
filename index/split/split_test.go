@@ -2,12 +2,9 @@ package split
 
 import (
 	"github.com/kanatohodets/carbonsearch/index"
-	"math/rand"
+	"github.com/kanatohodets/carbonsearch/util/test"
 	"testing"
 )
-
-var seed int64 = 232342358902345
-var rnd *rand.Rand
 
 func TestSortJoins(t *testing.T) {
 	// make sure it doesn't error on a 0 item slice
@@ -95,15 +92,14 @@ func BenchmarkSmallsetQuery(b *testing.B) {
 
 func BenchmarkLargesetQuery(b *testing.B) {
 	b.StopTimer()
-	rnd = rand.New(rand.NewSource(seed))
 	in := NewIndex("host")
-	hosts := rwords(100, 40)
+	hosts := test.GetJoinCorpus(100)
 	queryTerms := []string{}
 	for _, host := range hosts {
-		in.AddMetrics(host, index.HashMetrics(rwords(1000, 100)))
-		tags := rwords(10, 30)
-		if rnd.Intn(15) == 1 {
-			queryTerms = append(queryTerms, tags[rnd.Int()%len(tags)])
+		in.AddMetrics(host, index.HashMetrics(test.GetMetricCorpus(1000)))
+		tags := test.GetTagCorpus(10)
+		if test.Rand().Intn(15) == 1 {
+			queryTerms = append(queryTerms, tags[test.Rand().Int()%len(tags)])
 		}
 		in.AddTags(host, index.HashTags(tags))
 	}
@@ -113,25 +109,6 @@ func BenchmarkLargesetQuery(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		in.Query(query)
 	}
-}
-
-var alpha string = "abcdefghijklmnopqrstuvwxyz"
-
-func rwords(n int, wordMaxLen int) []string {
-	words := make([]string, n)
-	for i := 0; i < n; i++ {
-		l := rnd.Intn(wordMaxLen) + 1
-		word := make([]byte, l)
-		for j := 0; j < l; j++ {
-			word = append(word, rchr())
-		}
-		words = append(words, string(word))
-	}
-	return words
-}
-
-func rchr() byte {
-	return alpha[rnd.Int()%26]
 }
 
 // TODO(btyler) consolidate this into a testing table
