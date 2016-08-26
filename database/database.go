@@ -98,6 +98,11 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 
 	db.serviceIndexMutex.RLock()
 	for service, tags := range tagsByService {
+		// skip text because it needs raw metrics, not the hashed ones
+		if service == "text" {
+			continue
+		}
+
 		mappedIndex, ok := db.serviceToIndex[service]
 		if !ok {
 			log.Printf("warning: there's no index for service %q. as a result, these tags will be ignored: %v", service, tags)
@@ -116,17 +121,20 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	// query indexes, take intersection of metrics
 	metricSets := [][]index.Metric{}
 	for targetIndex, query := range queriesByIndex {
-		// TODO(btyler) -- text index isn't a proper index yet, but just
-		// a filter on the set that the other things spit out.
-		if targetIndex.Name() == "text index" {
-			continue
-		}
-
 		metrics, err := targetIndex.Query(query)
 		if err != nil {
 			return nil, fmt.Errorf("database: error while querying index %s: %s", targetIndex.Name(), err)
 		}
 
+		metricSets = append(metricSets, metrics)
+	}
+
+	textTags, ok := tagsByService["text"]
+	if ok {
+		metrics, err := db.TextIndex.Query(textTags)
+		if err != nil {
+			return nil, fmt.Errorf("database: error while querying text index: %s", err)
+		}
 		metricSets = append(metricSets, metrics)
 	}
 
@@ -139,12 +147,10 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		return nil, err
 	}
 
-	// TODO(btyler): 're-match' should hit a text index of all metric names,
-	// while 're-filter' should be the last-step filtering that it currently does.
-	textTags, ok := tagsByService["text"]
-	if ok {
+	if len(textTags) > 0 {
 		var err error
-		stringMetrics, err = db.TextIndex.Filter(textTags, stringMetrics)
+		// deliberate reassignment
+		stringMetrics, err = text.Filter(textTags, stringMetrics)
 		if err != nil {
 			return nil, fmt.Errorf("database: error while grepping: %s", err)
 		}
@@ -166,13 +172,18 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 
 	db.stats.MetricMessages.Add(1)
 
-	metrics := db.mapMetrics(msg.Metrics)
-	err = si.AddMetrics(msg.Value, metrics)
+	metricHashes := db.mapMetrics(msg.Metrics)
+	err = si.AddMetrics(msg.Value, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
 	}
 
-	db.stats.MetricsIndexed.Add(int64(len(metrics)))
+	err = db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
+	if err != nil {
+		return fmt.Errorf("database: could not add metrics to text index: %s", err)
+	}
+
+	db.stats.MetricsIndexed.Add(int64(len(metricHashes)))
 	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", si.Name()), util.ExpInt(si.MetricSize()))
 
 	return nil
@@ -287,9 +298,6 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 func New(queryLimit int, stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
-	textIndex := text.NewIndex()
-	serviceToIndex["text"] = textIndex
-
 	fullIndex := full.NewIndex()
 	serviceToIndex["custom"] = fullIndex
 
@@ -303,6 +311,6 @@ func New(queryLimit int, stats *util.Stats) *Database {
 		metrics: make(map[index.Metric]string),
 
 		FullIndex: fullIndex,
-		TextIndex: textIndex,
+		TextIndex: text.NewIndex(),
 	}
 }
