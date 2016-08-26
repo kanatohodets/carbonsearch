@@ -8,8 +8,7 @@ import (
 )
 
 type posting struct {
-	count int
-	list  []index.Metric
+	list []index.Metric
 }
 
 var n int = 3
@@ -130,6 +129,10 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 		}
 	}
 
+	for _, metrics := range tokenDelta {
+		index.SortMetrics(metrics)
+	}
+
 	ti.mutex.Lock()
 	defer ti.mutex.Unlock()
 	for token, newList := range tokenDelta {
@@ -139,24 +142,10 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 			ti.postings[token] = post
 		}
 
-		exists := map[index.Metric]bool{}
-		for _, existingMetric := range post.list {
-			exists[existingMetric] = true
-		}
-
-		changed := false
-		for _, new := range newList {
-			if exists[new] {
-				continue
-			}
-
-			post.count++
-			changed = true
-			post.list = append(post.list, new)
-		}
-
-		if changed {
-			index.SortMetrics(post.list)
+		if len(ti.postings[token].list) == 0 {
+			ti.postings[token].list = newList
+		} else {
+			ti.postings[token].list = index.UnionMetrics([][]index.Metric{ti.postings[token].list, newList})
 		}
 	}
 	return nil
