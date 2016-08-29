@@ -7,23 +7,19 @@ import (
 	"sync"
 )
 
-type posting struct {
-	list []index.Metric
-}
-
 var n int = 3
 
 type trigram uint32
 
 type Index struct {
-	postings map[trigram]*posting
+	postings map[trigram][]document
 	mutex    sync.RWMutex
 	count    int
 }
 
 func NewIndex() *Index {
 	return &Index{
-		postings: make(map[trigram]*posting),
+		postings: make(map[trigram][]document),
 	}
 }
 
@@ -92,17 +88,50 @@ func (ti *Index) Search(query string) ([]index.Metric, error) {
 		return nil, fmt.Errorf("text.Search: error tokenizing %v: %v", query, err)
 	}
 
-	metricSets := [][]index.Metric{}
-	for _, token := range queryTokens {
-		post, ok := ti.postings[token]
+	matching := map[index.Metric][]pos{}
+	skip := map[index.Metric]bool{}
+	for i := 0; i < len(queryTokens); i++ {
+		token := queryTokens[i]
+		docs, ok := ti.postings[token.tri]
 		if !ok {
 			// this trigram isn't in the index anywhere, so don't bother doing any more work: there's no match
 			return []index.Metric{}, nil
 		}
-		metricSets = append(metricSets, post.list)
+
+		// pick out documents with a matching position
+		for _, doc := range docs {
+			if skip[doc.metric] {
+				continue
+			}
+
+			matching[doc.metric] = append(matching[doc.metric], doc.pos)
+			list := matching[doc.metric]
+			// query: foo$ -> 0 'foo', 1 'oo$': the result list should always be i+1
+			// metric ^bfoo$ -> 0 ^bf, 1 bfo, 2 foo, 3 oo$.
+			// first match is 'foo', followed by 'oo$', so list should be [2, 3]
+			// previous match should be directly preceding this one
+			if len(list) != i+1 || (len(list) > 1 && list[i] != list[i-1]+1) {
+				skip[doc.metric] = true
+			}
+		}
+
+		if len(skip) == len(matching) {
+			return []index.Metric{}, nil
+		}
+
 	}
 
-	return index.IntersectMetrics(metricSets), nil
+	res := make([]index.Metric, 0, len(matching)-len(skip))
+	for metric, hits := range matching {
+		if skip[metric] || len(hits) != len(queryTokens) {
+			continue
+		}
+		res = append(res, metric)
+	}
+
+	index.SortMetrics(res)
+
+	return res, nil
 }
 
 func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
@@ -110,7 +139,7 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 		return fmt.Errorf("text index: cannot add 0 metrics to text index")
 	}
 
-	tokenDelta := map[trigram][]index.Metric{}
+	trigramDelta := map[trigram][]document{}
 	set := map[string]bool{}
 	for i, metricName := range metrics {
 		if set[metricName] {
@@ -125,79 +154,23 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 		}
 
 		for _, token := range tokens {
-			tokenDelta[token] = append(tokenDelta[token], metric)
+			trigramDelta[token.tri] = append(trigramDelta[token.tri], document{metric, token.pos})
 		}
 	}
 
-	for _, metrics := range tokenDelta {
-		index.SortMetrics(metrics)
+	for _, docs := range trigramDelta {
+		SortDocuments(docs)
 	}
 
 	ti.mutex.Lock()
 	defer ti.mutex.Unlock()
-	for token, newList := range tokenDelta {
-		post, ok := ti.postings[token]
-		if !ok {
-			post = &posting{}
-			ti.postings[token] = post
-		}
-
-		if len(ti.postings[token].list) == 0 {
-			ti.postings[token].list = newList
+	for trigram, newDocs := range trigramDelta {
+		docs := ti.postings[trigram]
+		if len(docs) == 0 {
+			ti.postings[trigram] = newDocs
 		} else {
-			ti.postings[token].list = index.UnionMetrics([][]index.Metric{ti.postings[token].list, newList})
+			ti.postings[trigram] = UnionDocuments([][]document{ti.postings[trigram], newDocs})
 		}
 	}
 	return nil
-}
-
-func tokenizeQuery(query string) ([]trigram, error) {
-	tokens := []trigram{}
-	return tokenize(query, tokens)
-}
-
-func tokenizeWithMarkers(term string) ([]trigram, error) {
-	if len(term) < n {
-		return nil, fmt.Errorf("%s is too short to search on", term)
-	}
-
-	// start with ^
-	tokens := []trigram{
-		trigramize([3]byte{'^', term[0], term[1]}),
-	}
-
-	tokens, err := tokenize(term, tokens)
-	if err != nil {
-		return nil, err
-	}
-
-	// shove '$' on the end
-	end := trigramize(
-		[3]byte{
-			term[len(term)-(n-1)],
-			term[len(term)-(n-2)],
-			'$',
-		},
-	)
-	tokens = append(tokens, end)
-	return tokens, nil
-}
-
-func tokenize(term string, tokens []trigram) ([]trigram, error) {
-	if len(term) < n {
-		return nil, fmt.Errorf("%s is too short to search on", term)
-	}
-
-	for i := 0; i <= len(term)-n; i++ {
-		tokens = append(
-			tokens,
-			trigramize([3]byte{term[i], term[i+1], term[i+2]}),
-		)
-	}
-
-	return tokens, nil
-}
-
-func trigramize(s [3]byte) trigram {
-	return trigram(uint32(s[0])<<16 | uint32(s[1])<<8 | uint32(s[2]))
 }

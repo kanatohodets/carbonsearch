@@ -109,24 +109,26 @@ func strigram(str string) trigram {
 
 func TestTokenize(t *testing.T) {
 	input := "foobar"
-	expected := []trigram{
-		strigram("^fo"),
-		strigram("foo"),
-		strigram("oob"),
-		strigram("oba"),
-		strigram("bar"),
-		strigram("ar$"),
+	expected := []string{
+		"^fo",
+		"foo",
+		"oob",
+		"oba",
+		"bar",
+		"ar$",
 	}
 
-	tokens, err := tokenizeWithMarkers(input)
+	res, err := tokenizeWithMarkers(input)
 	if err != nil {
 		t.Errorf("Tokenize returned an error: %v", err)
 		return
 	}
 
-	for i, token := range tokens {
-		if token != expected[i] {
-			t.Errorf("tokenization of %v failed: expected %v but got %v", input, expected[i], token)
+	for i, str := range expected {
+		wanted := token{pos(i - 1), strigram(str)}
+		got := res[i]
+		if got != wanted {
+			t.Errorf("tokenization of %v failed for trigram %v: expected %v at position %v but got %v", input, str, wanted, i, got)
 		}
 	}
 }
@@ -206,7 +208,10 @@ func TestSearch(t *testing.T) {
 	searchTest(t, "end pinned", in, "foo$", []string{"foo", "blorgfoo"})
 	searchTest(t, "start/end pinned", in, "^foo$", []string{"foo"})
 	searchTest(t, "partial match but zero result", in, "^ugh", []string{})
-	//searchTest(t, "respect user trigram positions", in, "cron$", []string{"rose.daffodil.cron"})
+	searchTest(t, "respect user trigram positions", in, "cron$", []string{"rose.daffodil.cron"})
+	searchTest(t, "full long metric name", in, "rose.daffodil.cron", []string{"rose.daffodil.cron"})
+	searchTest(t, "full long metric name pinned", in, "^rose.daffodil.cron$", []string{"rose.daffodil.cron"})
+	searchTest(t, "full long metric name, but broken pins", in, "$rose.daffodil.cron^", []string{})
 
 	emptyIndex := NewIndex()
 	searchTest(t, "zero results", emptyIndex, "qux", []string{})
@@ -256,7 +261,7 @@ func tokenCount(ti *Index, token trigram) (int, error) {
 		return 0, nil
 	}
 
-	return len(post.list), nil
+	return len(post), nil
 }
 
 func BenchmarkAddMetrics(b *testing.B) {
