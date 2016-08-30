@@ -1,7 +1,7 @@
-# carbonsearch
-## graphite-shaped search queries
+carbonsearch: graphite-shaped search queries
+--------------------------------------------
 
-carbonsearch is a search service for graphite.
+CarbonSearch is a search service for graphite.
 
 it takes a fake 'metric' like:
 
@@ -13,12 +13,14 @@ characteristics right now (using AND semantics).
 The purpose is to allow us to query metrics by attributes which are stored
 somewhere _other_ than in the metric name.
 
-## Query language
+Query language
+--------------
 The query language is just a set of AND'd key-value pairs. Each key-value pair
 has a prefix that indicates the data source, `discovery`
 for service discovery. The token as a whole (`server-dc:lhr`) is called a __tag__.
 
-### Special data sources
+Special data sources
+--------------------
 There's a fake data source called 're' which can be used as a final filter on
 metric name if the KV queries are returning too many things:
 
@@ -30,11 +32,12 @@ replication delay in LHR. The regex syntax is using the [Go
 package](https://golang.org/pkg/regexp/), but your graphite client might error
 out if you use too many special characters.
 
-## Configuration and Running
+Configuration and Running
+-------------------------
 See `*.example.yaml` for complete example configs with comments. Just `cp` to `$config_name.yaml` to use for real.
 
-### `config.yaml`
-
+`config.yaml`
+-------------
 Requires `-config` to specify a `config.yaml`, defaults to in the running
 directory.  The `consumers` key specifies which consumers should be started by
 carbonsearch.
@@ -46,17 +49,19 @@ For example,
 
 Would only start the HTTP API consumer, not the Kafka one.
 
-### Where it runs
+Where it runs
+-------------
 This is an in-memory service running alongside the carbonzipper, consuming from
 a handful of Kafka topics to populate the index. It resolves virtual namespace
 queries from carbon zipper into lists of real metrics.
 
-## Populating the index by sending messages
-
+Populating the index by sending messages
+----------------------------------------
 The search index is populated by consuming messages (via Kafka, HTTP API,
 etc.).  There are 3 types of messages: metrics, tags, and custom.
 
-### Metric messages
+Metric messages
+---------------
 Metric messages associate an arbitrary number of metrics with a value of a join key.
 
 In this case, the join key is `fqdn`, and the join key value is `hostname-1234`.
@@ -69,7 +74,8 @@ In this case, the join key is `fqdn`, and the join key value is `hostname-1234`.
       "key": "fqdn"
     }
 
-### Tag messages
+Tag messages
+------------
 Tag messages associate an arbitrary number of tags with a value of a join key.
 
     {
@@ -82,7 +88,8 @@ Tag messages associate an arbitrary number of tags with a value of a join key.
       "key": "fqdn"
     }
 
-### Custom messages
+Custom messages
+---------------
 Custom messages directly associate an arbitrary number of tags with an arbitrary number of metrics.
 
 This allows humans to create custom groupings to easily search.
