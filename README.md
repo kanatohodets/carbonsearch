@@ -16,21 +16,19 @@ somewhere _other_ than in the metric name.
 Query language
 --------------
 The query language is just a set of AND'd key-value pairs. Each key-value pair
-has a prefix that indicates the data source, `discovery`
-for service discovery. The token as a whole (`server-dc:lhr`) is called a __tag__.
+has a prefix that indicates the data source, like `lb-pool` for load balancer pool, or `discovery-live`
+for service discovery liveness. The token as a whole (`lb-pool:www`) is called a __tag__.
 
 Special data sources
 --------------------
 There's a fake data source called 're' which can be used as a final filter on
 metric name if the KV queries are returning too many things:
 
-    virt.v1.re-filter:Delay$.server-dc.lhr
+    virt.v1.text-filter:Delay.lb-pool:db
 
-This will take all metrics tagged with `server-dc:lhr` and filter for ones that
-match the regex `/Delay$/`, so you might end up with a bunch of metrics about
-replication delay in LHR. The regex syntax is using the [Go
-package](https://golang.org/pkg/regexp/), but your graphite client might error
-out if you use too many special characters.
+This will take all metrics tagged with `lb-pool:db` and filter for ones that
+contain `Delay` in the name, so you might end up with a bunch of metrics about replication
+delay in the db pool.
 
 Configuration and Running
 -------------------------
@@ -51,7 +49,7 @@ Would only start the HTTP API consumer, not the Kafka one.
 
 Where it runs
 -------------
-This is an in-memory service running alongside the carbonzipper, consuming from
+This is an in-memory service intended to run on [CarbonZipper](https://github.com/dgryski/carbonzipper) hosts. consuming from
 a handful of Kafka topics to populate the index. It resolves virtual namespace
 queries from carbon zipper into lists of real metrics.
 
@@ -81,7 +79,7 @@ Tag messages associate an arbitrary number of tags with a value of a join key.
     {
       "value": "hostname-1234",
       "tags": [
-        "server-status:live",
+        "server-state:live",
         "server-dc:lhr",
         "server-role:webserver"
       ],
@@ -101,7 +99,7 @@ This allows humans to create custom groupings to easily search.
         "server.hostname-1234.cpu.i7z"
       ],
       "tags": [
-        "custom-favorites:cronmasters"
+        "custom-favorites:monitoring"
       ]
     }
 
