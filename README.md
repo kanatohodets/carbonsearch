@@ -20,7 +20,7 @@ for service discovery liveness. The token as a whole (`lb-pool:www`) is called a
 
 Special data sources
 --------------------
-There's a fake data source called 're' which can be used as a final filter on
+There's a fake data source called 'text-filter' which can be used as a final filter on
 metric name if the KV queries are returning too many things:
 
     virt.v1.text-filter:Delay.lb-pool:db
