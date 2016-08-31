@@ -25,7 +25,8 @@ import (
 	"sync"
 )
 
-var buildVersion = "(development build)"
+// BuildVersion is provided to be overridden at build time. Eg. go build -ldflags -X 'main.BuildVersion=...'
+var BuildVersion = "(development build)"
 
 var db *database.Database
 
@@ -194,7 +195,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/query", queryHandler)
 		portStr := fmt.Sprintf(":%d", conf.Port)
-		log.Println("Starting carbonsearch", buildVersion)
+		log.Println("Starting carbonsearch", BuildVersion)
 		log.Printf("listening on %s\n", portStr)
 		log.Println(http.ListenAndServe(portStr, nil))
 	}()
