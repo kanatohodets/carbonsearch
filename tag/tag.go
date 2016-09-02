@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// Parse separates a "service-key:value" tag into "service" and "key:value". If the tag is malformed an error is returned.
 func Parse(tag string) (string, string, error) {
 	serviceDelimiter := strings.Index(tag, "-")
 	kvMarker := strings.Index(tag, ":")
