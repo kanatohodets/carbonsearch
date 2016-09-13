@@ -151,10 +151,8 @@ func addMetricTestCase(t *testing.T, testName string, in *Index, metrics []strin
 	if expectError {
 		if err == nil {
 			t.Errorf("add metrics test '%s' expected an error, but did not get one!", testName)
-			return
-		} else {
-			return
 		}
+		return
 	}
 
 	if err != nil {
