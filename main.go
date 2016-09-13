@@ -32,6 +32,8 @@ var db *database.Database
 
 var stats *util.Stats
 
+const virtPrefix = "virt.v1"
+
 // TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
 func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 	/*
@@ -56,12 +58,12 @@ func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 	}
 
 	target := targets[0]
-	validExp := strings.HasPrefix(target, "virt.v1.")
+	validExp := strings.HasPrefix(target, virtPrefix)
 	if !validExp {
-		return nil, fmt.Errorf("main: one of the targets is not a valid virtual metric (must start with 'virt.v1.'): %s", target)
+		return nil, fmt.Errorf("main: one of the targets is not a valid virtual metric (must start with %q): %s", virtPrefix, target)
 	}
 
-	raw := strings.TrimPrefix(target, "virt.v1.")
+	raw := strings.TrimPrefix(target, virtPrefix)
 	//NOTE(btyler) v1 only supports (implicit) 'and': otherwise we need precedence rules and...yuck
 	// additionally, you can get 'or' by adding more metrics to your query
 	tags := strings.Split(raw, ".")
