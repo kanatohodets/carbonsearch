@@ -1,0 +1,3 @@
+# full routes will be /consumer/tag, /consumer/metric, and /consumer/custom
+endpoint: "/consumer"
+port: 8100
