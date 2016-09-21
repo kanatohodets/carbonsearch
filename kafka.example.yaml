@@ -4,7 +4,7 @@ offset: "oldest"
 broker_list: ["localhost:9092"]
 # which topics to subscribe to, and how to interpret the messages there
 topic_mapping:
-    lhr_sm_metrics: "metric"
-    lhr_sm_tags: "tag"
-    lhr_sm_custom: "custom"
+    carbonsearch_metrics: "metric"
+    carbonsearch_tags: "tag"
+    carbonsearch_custom: "custom"
 
