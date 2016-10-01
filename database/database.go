@@ -2,6 +2,10 @@ package database
 
 import (
 	"fmt"
+
+	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+	"github.com/gogo/protobuf/proto"
+
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/full"
@@ -93,7 +97,7 @@ func (db *Database) GetSplitIndex(join string) *split.Index {
 		}
 */
 
-func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
+func (db *Database) Query(tagsByService map[string][]string) ([]*pb.GlobMatch, error) {
 	queriesByIndex := map[index.Index][]index.Tag{}
 
 	db.serviceIndexMutex.RLock()
@@ -160,7 +164,12 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		return nil, fmt.Errorf("database: query selected %d metrics, which is over the limit of %d results in a single query", len(stringMetrics), db.queryLimit)
 	}
 
-	return stringMetrics, nil
+	matches := make([]*pb.GlobMatch, 0, len(stringMetrics))
+	for _, metric := range stringMetrics {
+		matches = append(matches, &pb.GlobMatch{Path: proto.String(metric), IsLeaf: proto.Bool(true)})
+	}
+
+	return matches, nil
 }
 
 //TODO(btyler) -- do we want to auto-create indexes?

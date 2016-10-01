@@ -59,7 +59,9 @@ func TestQuery(t *testing.T) {
 	}
 
 	found := map[string]bool{}
-	for _, metric := range result {
+	for _, match := range result {
+		// awkward because protobuf uses string pointers, not strings
+		metric := *(match.Path)
 		found[metric] = true
 		_, ok := expectedMetrics[metric]
 		if !ok {
@@ -104,7 +106,8 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
-	if result[0] != "monitors.was_the_site_up" {
+	// awkward because protobuf uses string pointers, not strings
+	if *(result[0].Path) != "monitors.was_the_site_up" {
 		t.Errorf("database test: query %q expected only 'monitors.was_the_site_up', but got %q", query, result)
 		return
 	}

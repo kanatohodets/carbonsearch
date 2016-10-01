@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 
+	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+
 	"github.com/kanatohodets/carbonsearch/consumer"
 	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
 	"github.com/kanatohodets/carbonsearch/consumer/kafka"
@@ -35,7 +37,7 @@ var stats *util.Stats
 const virtPrefix = "virt.v1."
 
 // TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
-func parseQuery(uriQuery url.Values) (map[string][]string, error) {
+func parseTarget(target string) (map[string][]string, error) {
 	/*
 		parse something like this:
 			'virt.v1.server-state:live.server-hw:intel.lb-pool:www'
@@ -50,14 +52,6 @@ func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 		these will be used to search the "left" side of our indexes: tag -> [$join_key, $join_key...]
 	*/
 
-	// there will only be one '?target=foo' param per request, because carbon
-	// zipper is the only thing communicating with this service
-	targets := uriQuery["target"]
-	if len(targets) != 1 {
-		return nil, fmt.Errorf("main: there must be exactly one 'target' url param")
-	}
-
-	target := targets[0]
 	validExp := strings.HasPrefix(target, virtPrefix)
 	if !validExp {
 		return nil, fmt.Errorf("main: one of the targets is not a valid virtual metric (must start with %q): %s", virtPrefix, target)
@@ -87,29 +81,61 @@ func parseQuery(uriQuery url.Values) (map[string][]string, error) {
 	return tagsByService, nil
 }
 
-func queryHandler(w http.ResponseWriter, req *http.Request) {
+func findHandler(w http.ResponseWriter, req *http.Request) {
 	uri, _ := url.ParseRequestURI(req.URL.RequestURI())
 	uriQuery := uri.Query()
 
 	stats.QueriesHandled.Add(1)
 
-	queryTags, err := parseQuery(uriQuery)
+	targets := uriQuery["target"]
+	if len(targets) != 1 {
+		http.Error(w, fmt.Sprintf("main: there must be exactly one 'target' url param"), http.StatusBadRequest)
+	}
+
+	target := targets[0]
+	queryTags, err := parseTarget(target)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	queryRes, err := db.Query(queryTags)
+	formats := uriQuery["format"]
+	if len(formats) != 1 {
+		http.Error(w, fmt.Sprintf("main: there must be exactly one 'format' url param"), http.StatusBadRequest)
+		return
+	}
+
+	format := formats[0]
+	if format != "protobuf" && format != "json" {
+		http.Error(
+			w,
+			fmt.Sprintf("main: %q is not a recognized format: known formats are 'protobuf' and 'json'", format),
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	matches, err := db.Query(queryTags)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	err = enc.Encode(queryRes)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	var result pb.GlobResponse
+	result.Name = &target
+	result.Matches = matches
+
+	if format == "protobuf" {
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		b, _ := result.Marshal()
+		w.Write(b)
+	} else if format == "json" {
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		err = enc.Encode(result)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	}
 }
 
@@ -195,7 +221,7 @@ func main() {
 	}
 
 	go func() {
-		http.HandleFunc("/query", queryHandler)
+		http.HandleFunc("/metrics/find", findHandler)
 		portStr := fmt.Sprintf(":%d", conf.Port)
 		log.Println("Starting carbonsearch", BuildVersion)
 		log.Printf("listening on %s\n", portStr)
