@@ -98,7 +98,6 @@ func (h *HTTPConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			log.Printf("got this msg %v", msg)
 			err = db.InsertCustom(msg)
 			if err != nil {
 				log.Printf("blorg problem writing data! /consumer/custom %s, %s", err, string(payload))
