@@ -215,10 +215,15 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 
 	db.stats.CustomMessages.Add(1)
 
-	metrics := db.mapMetrics(msg.Metrics)
-	err := db.FullIndex.Add(tags, metrics)
+	metricHashes := db.mapMetrics(msg.Metrics)
+	err := db.FullIndex.Add(tags, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: error while adding to custom index: %s", err)
+	}
+
+	err = db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
+	if err != nil {
+		return fmt.Errorf("database: could not add metrics to text index: %s", err)
 	}
 
 	db.stats.FullIndexTags.Set(int64(db.FullIndex.TagSize()))
