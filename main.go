@@ -3,13 +3,6 @@ package main
 // handle virt. namespace metric requests from carbon zipper
 
 import (
-	"github.com/kanatohodets/carbonsearch/consumer"
-	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
-	"github.com/kanatohodets/carbonsearch/consumer/kafka"
-	"github.com/kanatohodets/carbonsearch/database"
-	"github.com/kanatohodets/carbonsearch/tag"
-	"github.com/kanatohodets/carbonsearch/util"
-
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,6 +16,13 @@ import (
 	"runtime/pprof"
 	"strings"
 	"sync"
+
+	"github.com/kanatohodets/carbonsearch/consumer"
+	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
+	"github.com/kanatohodets/carbonsearch/consumer/kafka"
+	"github.com/kanatohodets/carbonsearch/database"
+	"github.com/kanatohodets/carbonsearch/tag"
+	"github.com/kanatohodets/carbonsearch/util"
 )
 
 // BuildVersion is provided to be overridden at build time. Eg. go build -ldflags -X 'main.BuildVersion=...'
@@ -32,7 +32,7 @@ var db *database.Database
 
 var stats *util.Stats
 
-const virtPrefix = "virt.v1"
+const virtPrefix = "virt.v1."
 
 // TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
 func parseQuery(uriQuery url.Values) (map[string][]string, error) {
