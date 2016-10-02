@@ -91,6 +91,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 	queries := uriQuery["query"]
 	if len(queries) != 1 {
 		http.Error(w, fmt.Sprintf("main: there must be exactly one 'query' url param"), http.StatusBadRequest)
+		return
 	}
 
 	query := queries[0]
