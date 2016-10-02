@@ -38,7 +38,7 @@ var stats *util.Stats
 const virtPrefix = "virt.v1."
 
 // TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
-func parseTarget(target string) (map[string][]string, error) {
+func parseQuery(query string) (map[string][]string, error) {
 	/*
 		parse something like this:
 			'virt.v1.server-state:live.server-hw:intel.lb-pool:www'
@@ -53,12 +53,12 @@ func parseTarget(target string) (map[string][]string, error) {
 		these will be used to search the "left" side of our indexes: tag -> [$join_key, $join_key...]
 	*/
 
-	validExp := strings.HasPrefix(target, virtPrefix)
+	validExp := strings.HasPrefix(query, virtPrefix)
 	if !validExp {
-		return nil, fmt.Errorf("main: one of the targets is not a valid virtual metric (must start with %q): %s", virtPrefix, target)
+		return nil, fmt.Errorf("main: the query is not a valid virtual metric (must start with %q): %s", virtPrefix, query)
 	}
 
-	raw := strings.TrimPrefix(target, virtPrefix)
+	raw := strings.TrimPrefix(query, virtPrefix)
 	//NOTE(btyler) v1 only supports (implicit) 'and': otherwise we need precedence rules and...yuck
 	// additionally, you can get 'or' by adding more metrics to your query
 	tags := strings.Split(raw, ".")
@@ -88,13 +88,13 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 
 	stats.QueriesHandled.Add(1)
 
-	targets := uriQuery["target"]
-	if len(targets) != 1 {
-		http.Error(w, fmt.Sprintf("main: there must be exactly one 'target' url param"), http.StatusBadRequest)
+	queries := uriQuery["query"]
+	if len(queries) != 1 {
+		http.Error(w, fmt.Sprintf("main: there must be exactly one 'query' url param"), http.StatusBadRequest)
 	}
 
-	target := targets[0]
-	queryTags, err := parseTarget(target)
+	query := queries[0]
+	queryTags, err := parseQuery(query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -123,7 +123,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	var result pb.GlobResponse
-	result.Name = &target
+	result.Name = &query
 	result.Matches = make([]*pb.GlobMatch, 0, len(metrics))
 	for _, metric := range metrics {
 		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(metric), IsLeaf: proto.Bool(true)})
