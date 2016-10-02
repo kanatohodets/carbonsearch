@@ -18,6 +18,7 @@ import (
 	"sync"
 
 	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/kanatohodets/carbonsearch/consumer"
 	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
@@ -115,7 +116,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	matches, err := db.Query(queryTags)
+	metrics, err := db.Query(queryTags)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -123,7 +124,10 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 
 	var result pb.GlobResponse
 	result.Name = &target
-	result.Matches = matches
+	result.Matches = make([]*pb.GlobMatch, 0, len(metrics))
+	for _, metric := range metrics {
+		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(metric), IsLeaf: proto.Bool(true)})
+	}
 
 	if format == "protobuf" {
 		w.Header().Set("Content-Type", "application/x-protobuf")
