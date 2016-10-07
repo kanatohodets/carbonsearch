@@ -3,8 +3,9 @@ package text
 import (
 	"container/heap"
 	"fmt"
-	"github.com/kanatohodets/carbonsearch/index"
 	"sort"
+
+	"github.com/kanatohodets/carbonsearch/index"
 )
 
 // we can't use uint8 because there are metrics with ~450 characters

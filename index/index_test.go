@@ -1,9 +1,10 @@
 package index
 
 import (
+	"testing"
+
 	"github.com/kanatohodets/carbonsearch/util"
 	"github.com/kanatohodets/carbonsearch/util/test"
-	"testing"
 )
 
 func TestHashTags(t *testing.T) {

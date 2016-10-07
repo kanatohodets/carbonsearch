@@ -2,6 +2,8 @@ package database
 
 import (
 	"fmt"
+	"log"
+	"sync"
 
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/index"
@@ -10,8 +12,6 @@ import (
 	"github.com/kanatohodets/carbonsearch/index/text"
 	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
-	"log"
-	"sync"
 )
 
 type Database struct {

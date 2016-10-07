@@ -17,15 +17,15 @@ import (
 	"strings"
 	"sync"
 
-	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
-	"github.com/gogo/protobuf/proto"
-
 	"github.com/kanatohodets/carbonsearch/consumer"
 	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
 	"github.com/kanatohodets/carbonsearch/consumer/kafka"
 	"github.com/kanatohodets/carbonsearch/database"
 	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
+
+	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+	"github.com/gogo/protobuf/proto"
 )
 
 // BuildVersion is provided to be overridden at build time. Eg. go build -ldflags -X 'main.BuildVersion=...'

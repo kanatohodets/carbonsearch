@@ -1,9 +1,10 @@
 package split
 
 import (
+	"testing"
+
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/util/test"
-	"testing"
 )
 
 func TestSortJoins(t *testing.T) {

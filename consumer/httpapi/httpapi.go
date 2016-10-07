@@ -3,13 +3,14 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
-	m "github.com/kanatohodets/carbonsearch/consumer/message"
-	"github.com/kanatohodets/carbonsearch/database"
-	"github.com/kanatohodets/carbonsearch/util"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"sync"
+
+	m "github.com/kanatohodets/carbonsearch/consumer/message"
+	"github.com/kanatohodets/carbonsearch/database"
+	"github.com/kanatohodets/carbonsearch/util"
 )
 
 type HTTPConfig struct {

@@ -1,10 +1,11 @@
 package database
 
 import (
-	m "github.com/kanatohodets/carbonsearch/consumer/message"
-	"github.com/kanatohodets/carbonsearch/util"
 	"os"
 	"testing"
+
+	m "github.com/kanatohodets/carbonsearch/consumer/message"
+	"github.com/kanatohodets/carbonsearch/util"
 )
 
 var stats *util.Stats

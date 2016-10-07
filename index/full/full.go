@@ -2,8 +2,9 @@ package full
 
 import (
 	"fmt"
-	"github.com/kanatohodets/carbonsearch/index"
 	"sync"
+
+	"github.com/kanatohodets/carbonsearch/index"
 )
 
 type Index struct {

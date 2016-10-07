@@ -33,10 +33,11 @@ the query process goes like this:
 import (
 	"container/heap"
 	"fmt"
-	"github.com/kanatohodets/carbonsearch/index"
-	"github.com/kanatohodets/carbonsearch/util"
 	"sort"
 	"sync"
+
+	"github.com/kanatohodets/carbonsearch/index"
+	"github.com/kanatohodets/carbonsearch/util"
 )
 
 type Join uint64

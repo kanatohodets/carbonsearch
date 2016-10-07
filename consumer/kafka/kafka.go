@@ -1,15 +1,16 @@
 package kafka
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"sync"
+
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/database"
 	"github.com/kanatohodets/carbonsearch/util"
 
-	"encoding/json"
-	"fmt"
 	"github.com/Shopify/sarama"
-	"log"
-	"sync"
 )
 
 type KafkaConfig struct {

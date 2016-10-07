@@ -2,9 +2,10 @@ package text
 
 import (
 	"fmt"
-	"github.com/kanatohodets/carbonsearch/index"
 	"strings"
 	"sync"
+
+	"github.com/kanatohodets/carbonsearch/index"
 )
 
 var n int = 3

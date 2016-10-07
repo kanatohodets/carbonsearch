@@ -1,8 +1,9 @@
 package full
 
 import (
-	"github.com/kanatohodets/carbonsearch/index"
 	"testing"
+
+	"github.com/kanatohodets/carbonsearch/index"
 )
 
 func TestQuery(t *testing.T) {

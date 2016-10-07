@@ -2,8 +2,9 @@ package index
 
 import (
 	"container/heap"
-	"github.com/kanatohodets/carbonsearch/util"
 	"sort"
+
+	"github.com/kanatohodets/carbonsearch/util"
 )
 
 type Metric uint64

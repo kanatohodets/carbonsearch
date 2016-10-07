@@ -1,8 +1,9 @@
 package consumer
 
 import (
-	"github.com/kanatohodets/carbonsearch/database"
 	"sync"
+
+	"github.com/kanatohodets/carbonsearch/database"
 )
 
 type Consumer interface {
