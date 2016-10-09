@@ -44,16 +44,20 @@ func GetJoinCorpus(size int) []string {
 }
 
 func rwords(n int, wordMaxLen int) []string {
-	words := make([]string, n)
-	for i := 0; i < n; i++ {
+	words := map[string]bool{}
+	for len(words) < n {
 		l := rnd.Intn(wordMaxLen) + 1
 		word := make([]byte, l)
 		for j := 0; j < l; j++ {
 			word = append(word, rchr())
 		}
-		words = append(words, string(word))
+		words[string(word)] = true
 	}
-	return words
+	res := make([]string, 0, len(words))
+	for word, _ := range words {
+		res = append(res, word)
+	}
+	return res
 }
 
 func rchr() byte {
