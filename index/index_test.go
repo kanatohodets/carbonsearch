@@ -161,6 +161,43 @@ func BenchmarkIntersectMetricsSmallListSmallSets(b *testing.B) {
 	}
 }
 
+// ################## pairwise
+func BenchmarkPairwiseIntersectMetricsSmallListSmallSets(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		RepeatedPairwiseIntersectMetrics(metricSets)
+	}
+}
+
+func BenchmarkPairwiseIntersectMetricsSmallListLargeSets(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10000))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		RepeatedPairwiseIntersectMetrics(metricSets)
+	}
+}
+
+func BenchmarkPairwiseIntersectMetricsLargeListSmallSets(b *testing.B) {
+	metricSets := make([][]Metric, 300)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		RepeatedPairwiseIntersectMetrics(metricSets)
+	}
+}
+
 func BenchmarkIntersectMetricsSmallListLargeSets(b *testing.B) {
 	metricSets := make([][]Metric, 3)
 	for i, _ := range metricSets {
@@ -392,6 +429,94 @@ func TestIntersectTags(t *testing.T) {
 		return
 	}
 	if intersection[0] != tags[0][0] {
+		t.Error("index test: somehow a universe of 1 resulted in an intersection of 1, but not that 1. wtf o_o")
+		return
+	}
+}
+
+// TODO(btyler) consolidate this into a testing table
+func TestRepeatedPairwiseIntersectMetrics(t *testing.T) {
+	// basic intersection
+	metrics := [][]Metric{
+		HashMetrics([]string{"foo", "bar", "baz"}),
+		HashMetrics([]string{"qux", "bar"}),
+		HashMetrics([]string{"blorg", "bar"}),
+	}
+
+	for _, metricList := range metrics {
+		SortMetrics(metricList)
+	}
+
+	expectedList := HashMetrics([]string{"bar"})
+	expected := map[Metric]bool{}
+
+	for _, metric := range expectedList {
+		expected[metric] = false
+	}
+
+	intersection := RepeatedPairwiseIntersectMetrics(metrics)
+
+	for _, metric := range intersection {
+		_, ok := expected[metric]
+		if !ok {
+			t.Errorf("index test: metric intersect included %v, which was not expected", metric)
+			return
+		}
+		expected[metric] = true
+	}
+
+	for metric, found := range expected {
+		if !found {
+			t.Errorf("index test: metric intersect did NOT include %v, which was expected to be there", metric)
+		}
+	}
+
+	// empty intersection due to empty universe
+	intersection = RepeatedPairwiseIntersectMetrics([][]Metric{})
+	if len(intersection) > 0 {
+		t.Error("index test: metric intersect on empty set returned non-empty")
+	}
+
+	// empty intersection due to one empty subset
+	metrics = [][]Metric{
+		HashMetrics([]string{"foo", "bar", "baz"}),
+		HashMetrics([]string{"qux", "bar"}),
+		HashMetrics([]string{}),
+	}
+
+	for _, metricList := range metrics {
+		SortMetrics(metricList)
+	}
+	intersection = RepeatedPairwiseIntersectMetrics(metrics)
+	if len(intersection) > 0 {
+		t.Error("index test: metric intersect returned non-empty, but it should have been empty")
+	}
+
+	// empty intersection due to no overlap
+	metrics = [][]Metric{
+		HashMetrics([]string{"foo"}),
+		HashMetrics([]string{"bar"}),
+		HashMetrics([]string{"baz", "blorg", "buzz", "pow", "kablooie", "whizbang", "rain", "always rain"}),
+	}
+	for _, metricList := range metrics {
+		SortMetrics(metricList)
+	}
+	intersection = RepeatedPairwiseIntersectMetrics(metrics)
+	if len(intersection) > 0 {
+		t.Error("index test: metric intersect returned non-empty, but it should have been empty")
+	}
+
+	// intersection of just one thing
+	metrics = [][]Metric{HashMetrics([]string{"foo"})}
+	for _, metricList := range metrics {
+		SortMetrics(metricList)
+	}
+	intersection = RepeatedPairwiseIntersectMetrics(metrics)
+	if len(intersection) != 1 {
+		t.Error("index test: metric intersect returned more than 1 result for a universe of 1")
+		return
+	}
+	if intersection[0] != metrics[0][0] {
 		t.Error("index test: somehow a universe of 1 resulted in an intersection of 1, but not that 1. wtf o_o")
 		return
 	}

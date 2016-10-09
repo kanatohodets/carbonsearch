@@ -139,6 +139,65 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 	}
 }
 
+func RepeatedPairwiseIntersectMetrics(metricSets [][]Metric) []Metric {
+	if len(metricSets) == 0 {
+		return []Metric{}
+	}
+
+	for _, set := range metricSets {
+		if len(set) == 0 {
+			return []Metric{}
+		}
+	}
+	sort.Sort(MetricSetsHeap(metricSets))
+	// result can contain at most the number of items in the smallest set
+	a := metricSets[0]
+	result := make([]Metric, 0, len(metricSets[0]))
+	var ridx int = 0
+	for i := 1; i < len(metricSets); i++ {
+		b := metricSets[i]
+		var aidx, bidx int
+
+	scan:
+		for aidx < len(a) && bidx < len(b) {
+			if a[aidx] == b[bidx] {
+				//log.Printf("i: %v, ridx: %v, aidx: %v, bidx: %v, value %v, res: %v", i, ridx, aidx, bidx, a[aidx], result)
+				if len(result) == 0 {
+					result = append(result, a[aidx])
+				} else {
+					if result[ridx] != a[aidx] {
+						result = append(result, a[aidx])
+					}
+					ridx++
+				}
+				aidx++
+				bidx++
+				if aidx == len(a) || bidx == len(b) {
+					break scan
+				}
+			}
+
+			for a[aidx] < b[bidx] {
+				aidx++
+				if aidx == len(a) {
+					break scan
+				}
+			}
+
+			for a[aidx] > b[bidx] {
+				bidx++
+				if bidx == len(b) {
+					break scan
+				}
+			}
+		}
+		a = result
+		ridx = 0
+	}
+
+	return a
+}
+
 func SortTags(tags []Tag) {
 	sort.Sort(TagSlice(tags))
 }
