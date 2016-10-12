@@ -58,12 +58,12 @@ func (fi *Index) Add(tags []index.Tag, metrics []index.Metric) error {
 	return nil
 }
 
-func (fi *Index) Query(query []index.Tag) ([]index.Metric, error) {
+func (fi *Index) Query(q *index.Query) ([]index.Metric, error) {
 	fi.mutex.RLock()
 	defer fi.mutex.RUnlock()
 
-	metricSets := make([][]index.Metric, len(query))
-	for pos, tag := range query {
+	metricSets := make([][]index.Metric, len(q.Hashed))
+	for pos, tag := range q.Hashed {
 		metricSets[pos] = fi.index[tag]
 	}
 

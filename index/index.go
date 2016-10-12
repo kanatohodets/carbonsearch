@@ -21,8 +21,28 @@ func (a TagSlice) Len() int           { return len(a) }
 func (a TagSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a TagSlice) Less(i, j int) bool { return a[i] < a[j] }
 
+type Query struct {
+	Raw    []string
+	Hashed []Tag
+}
+
+func NewQuery(raw []string) *Query {
+	hashed := HashTags(raw)
+	return &Query{
+		Raw:    raw,
+		Hashed: hashed,
+	}
+}
+
+//TODO(btyler) -- think about whether this should dedupe
+func (q *Query) AddTags(raw []string) {
+	hashed := HashTags(raw)
+	q.Raw = append(q.Raw, raw...)
+	q.Hashed = append(q.Hashed, hashed...)
+}
+
 type Index interface {
-	Query([]Tag) ([]Metric, error)
+	Query(*Query) ([]Metric, error)
 	Name() string
 }
 

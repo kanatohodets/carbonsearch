@@ -24,9 +24,9 @@ func NewIndex() *Index {
 	}
 }
 
-func (ti *Index) Query(rawTags []string) ([]index.Metric, error) {
+func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 	searches := []string{}
-	for _, tag := range rawTags {
+	for _, tag := range q.Raw {
 		if strings.HasPrefix(tag, "text-match:") {
 			search := strings.TrimPrefix(tag, "text-match:")
 			searches = append(searches, search)

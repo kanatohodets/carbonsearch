@@ -14,7 +14,7 @@ func TestQuery(t *testing.T) {
 	in := NewIndex()
 
 	in.Add(tags, metrics)
-	query := index.HashTags([]string{"server-state:live"})
+	query := index.NewQuery([]string{"server-state:live"})
 	result, err := in.Query(query)
 	if err != nil {
 		t.Error(err)
@@ -28,7 +28,7 @@ func TestQuery(t *testing.T) {
 		t.Errorf("full index test: the index had %d search results. that value is wrong because it isn't 1", len(result))
 	}
 
-	emptyResult, err := in.Query(index.HashTags([]string{"blorgtag"}))
+	emptyResult, err := in.Query(index.NewQuery([]string{"blorgtag"}))
 	if err != nil {
 		t.Errorf("error querying blorgtag: %v", err)
 	}

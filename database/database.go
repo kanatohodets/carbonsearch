@@ -95,27 +95,22 @@ func (db *Database) GetSplitIndex(join string) *split.Index {
 */
 
 func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
-	queriesByIndex := map[index.Index][]index.Tag{}
+	queriesByIndex := map[index.Index]*index.Query{}
 
 	db.serviceIndexMutex.RLock()
 	for service, tags := range tagsByService {
-		// skip text because it needs raw metrics, not the hashed ones
-		if service == "text" {
-			continue
-		}
-
 		mappedIndex, ok := db.serviceToIndex[service]
 		if !ok {
 			log.Printf("warning: there's no index for service %q. as a result, these tags will be ignored: %v", service, tags)
 			log.Println("this means that no tags have been added to the database with this service; the producer has not started yet")
 			continue
 		}
-		_, ok = queriesByIndex[mappedIndex]
-		if !ok {
-			queriesByIndex[mappedIndex] = []index.Tag{}
+		q, ok := queriesByIndex[mappedIndex]
+		if ok {
+			q.AddTags(tags)
+		} else {
+			queriesByIndex[mappedIndex] = index.NewQuery(tags)
 		}
-		hashedTags := index.HashTags(tags)
-		queriesByIndex[mappedIndex] = append(queriesByIndex[mappedIndex], hashedTags...)
 	}
 	db.serviceIndexMutex.RUnlock()
 
@@ -127,15 +122,6 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 			return nil, fmt.Errorf("database: error while querying index %s: %s", targetIndex.Name(), err)
 		}
 
-		metricSets = append(metricSets, metrics)
-	}
-
-	textTags, ok := tagsByService["text"]
-	if ok {
-		metrics, err := db.TextIndex.Query(textTags)
-		if err != nil {
-			return nil, fmt.Errorf("database: error while querying text index: %s", err)
-		}
 		metricSets = append(metricSets, metrics)
 	}
 
@@ -298,6 +284,9 @@ func New(queryLimit int, stats *util.Stats) *Database {
 	fullIndex := full.NewIndex()
 	serviceToIndex["custom"] = fullIndex
 
+	textIndex := text.NewIndex()
+	serviceToIndex["text"] = textIndex
+
 	return &Database{
 		stats:          stats,
 		serviceToIndex: serviceToIndex,
@@ -308,6 +297,6 @@ func New(queryLimit int, stats *util.Stats) *Database {
 		metrics: make(map[index.Metric]string),
 
 		FullIndex: fullIndex,
-		TextIndex: text.NewIndex(),
+		TextIndex: textIndex,
 	}
 }

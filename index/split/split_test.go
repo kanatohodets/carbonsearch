@@ -48,7 +48,7 @@ func TestQuery(t *testing.T) {
 	in := NewIndex("host")
 	metrics := index.HashMetrics([]string{metricName})
 	tags := index.HashTags([]string{"server-state:live", "server-dc:lhr"})
-	query := index.HashTags([]string{"server-state:live"})
+	query := index.NewQuery([]string{"server-state:live"})
 
 	in.AddMetrics(host, metrics)
 	in.AddTags(host, tags)
@@ -65,7 +65,7 @@ func TestQuery(t *testing.T) {
 		t.Errorf("split index test: the index had %d search results. that value is wrong because it isn't 1", len(result))
 	}
 
-	emptyResult, err := in.Query(index.HashTags([]string{"blorgtag"}))
+	emptyResult, err := in.Query(index.NewQuery([]string{"blorgtag"}))
 	if err != nil {
 		t.Errorf("error querying blorgtag: %v", err)
 	}
@@ -84,7 +84,7 @@ func BenchmarkSmallsetQuery(b *testing.B) {
 	in.AddMetrics(host, metrics)
 	in.AddTags(host, index.HashTags(tags))
 
-	query := index.HashTags([]string{"server-state:live"})
+	query := index.NewQuery([]string{"server-state:live"})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		in.Query(query)
@@ -105,7 +105,7 @@ func BenchmarkLargesetQuery(b *testing.B) {
 		in.AddTags(host, index.HashTags(tags))
 	}
 
-	query := index.HashTags(queryTerms)
+	query := index.NewQuery(queryTerms)
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
 		in.Query(query)

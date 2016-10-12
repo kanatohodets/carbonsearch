@@ -140,11 +140,11 @@ func (si *Index) AddTags(rawJoin string, tags []index.Tag) error {
 	return nil
 }
 
-func (si *Index) Query(query []index.Tag) ([]index.Metric, error) {
+func (si *Index) Query(q *index.Query) ([]index.Metric, error) {
 	// get a slice of all the join keys (for example, hostnames) associated with these tags
 	joinLists := [][]Join{}
 	si.tagMutex.RLock()
-	for _, tag := range query {
+	for _, tag := range q.Hashed {
 		list, ok := si.tagToJoin[tag]
 		if ok {
 			joinLists = append(joinLists, list)
