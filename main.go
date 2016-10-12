@@ -247,7 +247,7 @@ func main() {
 	}
 
 	go func() {
-		http.HandleFunc("/metrics/find", func(w http.ResponseWriter, req *http.Request) {
+		http.HandleFunc("/metrics/find/", func(w http.ResponseWriter, req *http.Request) {
 			findHandler(conf.QueryLimit, w, req)
 		})
 
