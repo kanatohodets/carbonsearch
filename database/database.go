@@ -148,15 +148,6 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		return nil, err
 	}
 
-	if len(textTags) > 0 {
-		var err error
-		// deliberate reassignment
-		stringMetrics, err = text.Filter(textTags, stringMetrics)
-		if err != nil {
-			return nil, fmt.Errorf("database: error while grepping: %s", err)
-		}
-	}
-
 	if len(stringMetrics) > db.queryLimit {
 		return nil, fmt.Errorf("database: query selected %d metrics, which is over the limit of %d results in a single query", len(stringMetrics), db.queryLimit)
 	}
