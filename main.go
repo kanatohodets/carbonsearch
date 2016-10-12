@@ -35,7 +35,7 @@ var db *database.Database
 
 var stats *util.Stats
 
-const virtPrefix = "virt.v1."
+var virtPrefix string
 
 // TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
 func parseQuery(queryLimit int, query string) (map[string][]string, error) {
@@ -167,6 +167,7 @@ func main() {
 	configPath := flag.String("config", "config.yaml", "Path to the `config file`.")
 	blockingProfile := flag.String("blockProfile", "", "Path to `block profile output file`. Block profiler disabled if empty.")
 	cpuProfile := flag.String("cpuProfile", "", "Path to `cpu profile output file`. CPU profiler disabled if empty.")
+	virtPrefix = *flag.String("prefix", "virt.v1.", "Query prefix")
 	flag.Parse()
 
 	if *configPath == "" {
