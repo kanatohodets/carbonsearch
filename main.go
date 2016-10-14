@@ -38,7 +38,7 @@ var stats *util.Stats
 const virtPrefix = "virt.v1."
 
 // TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
-func parseQuery(query string) (map[string][]string, error) {
+func parseQuery(queryLimit int, query string) (map[string][]string, error) {
 	/*
 		parse something like this:
 			'virt.v1.server-state:live.server-hw:intel.lb-pool:www'
@@ -62,6 +62,13 @@ func parseQuery(query string) (map[string][]string, error) {
 	//NOTE(btyler) v1 only supports (implicit) 'and': otherwise we need precedence rules and...yuck
 	// additionally, you can get 'or' by adding more metrics to your query
 	tags := strings.Split(raw, ".")
+	if len(tags) > queryLimit {
+		return nil, fmt.Errorf(
+			"parseQuery: max query size is %v, but this query has %v tags. try again with a smaller query",
+			queryLimit,
+			len(tags),
+		)
+	}
 
 	tagsByService := make(map[string][]string)
 	for _, queryTag := range tags {
@@ -82,52 +89,64 @@ func parseQuery(query string) (map[string][]string, error) {
 	return tagsByService, nil
 }
 
-func findHandler(w http.ResponseWriter, req *http.Request) {
+func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, error) {
+	metrics, err := db.Query(query)
+	var result pb.GlobResponse
+	if err != nil {
+		return result, err
+	}
+
+	result.Name = &rawQuery
+	result.Matches = make([]*pb.GlobMatch, 0, len(metrics))
+	for _, metric := range metrics {
+		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(metric), IsLeaf: proto.Bool(true)})
+	}
+
+	return result, nil
+}
+
+func findHandler(queryLimit int, w http.ResponseWriter, req *http.Request) {
 	uri, _ := url.ParseRequestURI(req.URL.RequestURI())
 	uriQuery := uri.Query()
 
 	stats.QueriesHandled.Add(1)
-
 	queries := uriQuery["query"]
 	if len(queries) != 1 {
-		http.Error(w, fmt.Sprintf("main: there must be exactly one 'query' url param"), http.StatusBadRequest)
-		return
-	}
-
-	query := queries[0]
-	queryTags, err := parseQuery(query)
-	if err != nil {
+		err := fmt.Errorf("req validation: there must be exactly one 'query' url param")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	formats := uriQuery["format"]
 	if len(formats) != 1 {
-		http.Error(w, fmt.Sprintf("main: there must be exactly one 'format' url param"), http.StatusBadRequest)
+		err := fmt.Errorf("req validation: there must be exactly one 'format' url param")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	format := formats[0]
 	if format != "protobuf" && format != "json" {
-		http.Error(
-			w,
-			fmt.Sprintf("main: %q is not a recognized format: known formats are 'protobuf' and 'json'", format),
-			http.StatusBadRequest,
-		)
+		err := fmt.Errorf("main: %q is not a recognized format: known formats are 'protobuf' and 'json'", format)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	metrics, err := db.Query(queryTags)
+	rawQuery := queries[0]
+	queryTags, err := parseQuery(queryLimit, rawQuery)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	var result pb.GlobResponse
-	result.Name = &query
-	result.Matches = make([]*pb.GlobMatch, 0, len(metrics))
-	for _, metric := range metrics {
-		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(metric), IsLeaf: proto.Bool(true)})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result, err := handleQuery(rawQuery, queryTags)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	if format == "protobuf" {
@@ -174,9 +193,10 @@ func main() {
 	}
 
 	type Config struct {
-		Port       int               `yaml:"port"`
-		QueryLimit int               `yaml:"query_limit"`
-		Consumers  map[string]string `yaml:"consumers"`
+		Port        int               `yaml:"port"`
+		QueryLimit  int               `yaml:"query_limit"`
+		ResultLimit int               `yaml:"result_limit"`
+		Consumers   map[string]string `yaml:"consumers"`
 	}
 
 	conf := &Config{}
@@ -192,7 +212,7 @@ func main() {
 	stats = util.InitStats()
 
 	wg := &sync.WaitGroup{}
-	db = database.New(conf.QueryLimit, stats)
+	db = database.New(conf.ResultLimit, stats)
 	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){
@@ -226,7 +246,10 @@ func main() {
 	}
 
 	go func() {
-		http.HandleFunc("/metrics/find", findHandler)
+		http.HandleFunc("/metrics/find", func(w http.ResponseWriter, req *http.Request) {
+			findHandler(conf.QueryLimit, w, req)
+		})
+
 		portStr := fmt.Sprintf(":%d", conf.Port)
 		log.Println("Starting carbonsearch", BuildVersion)
 		log.Printf("listening on %s\n", portStr)
