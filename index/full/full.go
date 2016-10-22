@@ -8,7 +8,7 @@ import (
 )
 
 type Index struct {
-	index      map[index.Tag][]index.Metric
+	index      map[index.Hash][]index.Hash
 	mutex      sync.RWMutex
 	tagSize    int
 	metricSize int
@@ -16,11 +16,11 @@ type Index struct {
 
 func NewIndex() *Index {
 	return &Index{
-		index: make(map[index.Tag][]index.Metric),
+		index: make(map[index.Hash][]index.Hash),
 	}
 }
 
-func (fi *Index) Add(tags []index.Tag, metrics []index.Metric) error {
+func (fi *Index) Add(tags []index.Hash, metrics []index.Hash) error {
 	fi.mutex.Lock()
 	defer fi.mutex.Unlock()
 
@@ -36,11 +36,11 @@ func (fi *Index) Add(tags []index.Tag, metrics []index.Metric) error {
 		associatedMetrics, ok := fi.index[tag]
 		if !ok {
 			fi.tagSize++
-			associatedMetrics = []index.Metric{}
+			associatedMetrics = []index.Hash{}
 			fi.index[tag] = associatedMetrics
 		}
 
-		existingMember := make(map[index.Metric]bool)
+		existingMember := make(map[index.Hash]bool)
 		for _, metric := range associatedMetrics {
 			existingMember[metric] = true
 		}
@@ -52,22 +52,22 @@ func (fi *Index) Add(tags []index.Tag, metrics []index.Metric) error {
 				associatedMetrics = append(associatedMetrics, metric)
 			}
 		}
-		index.SortMetrics(associatedMetrics)
+		index.SortHashes(associatedMetrics)
 		fi.index[tag] = associatedMetrics
 	}
 	return nil
 }
 
-func (fi *Index) Query(q *index.Query) ([]index.Metric, error) {
+func (fi *Index) Query(q *index.Query) ([]index.Hash, error) {
 	fi.mutex.RLock()
 	defer fi.mutex.RUnlock()
 
-	metricSets := make([][]index.Metric, len(q.Hashed))
-	for pos, tag := range q.Hashed {
+	metricSets := make([][]index.Hash, len(q.Tags))
+	for pos, tag := range q.Tags {
 		metricSets[pos] = fi.index[tag]
 	}
 
-	return index.IntersectMetrics(metricSets), nil
+	return index.IntersectHashes(metricSets), nil
 }
 
 func (fi *Index) Name() string {

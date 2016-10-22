@@ -24,7 +24,7 @@ type Database struct {
 	splitIndexes map[string]*split.Index
 	splitMutex   sync.RWMutex
 
-	metrics      map[index.Metric]string
+	metrics      map[index.Hash]string
 	metricsMutex sync.RWMutex
 
 	FullIndex *full.Index
@@ -115,7 +115,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	db.serviceIndexMutex.RUnlock()
 
 	// query indexes, take intersection of metrics
-	metricSets := [][]index.Metric{}
+	metricSets := [][]index.Hash{}
 	for targetIndex, query := range queriesByIndex {
 		metrics, err := targetIndex.Query(query)
 		if err != nil {
@@ -125,7 +125,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		metricSets = append(metricSets, metrics)
 	}
 
-	metrics := index.IntersectMetrics(metricSets)
+	metrics := index.IntersectHashes(metricSets)
 
 	stringMetrics, err := db.unmapMetrics(metrics)
 	// TODO(btyler): try to figure out how to annotate this error with better
@@ -175,7 +175,7 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 
 	db.stats.TagMessages.Add(1)
 
-	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, si))
+	tags := index.HashStrings(db.validateServiceIndexPairs(msg.Tags, si))
 
 	err = si.AddTags(msg.Value, tags)
 	if err != nil {
@@ -189,7 +189,7 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 }
 
 func (db *Database) InsertCustom(msg *m.TagMetric) error {
-	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, db.FullIndex))
+	tags := index.HashStrings(db.validateServiceIndexPairs(msg.Tags, db.FullIndex))
 
 	db.stats.CustomMessages.Add(1)
 
@@ -246,14 +246,14 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 	return valid
 }
 
-func (db *Database) mapMetrics(metrics []string) []index.Metric {
+func (db *Database) mapMetrics(metrics []string) []index.Hash {
 	db.metricsMutex.Lock()
 	defer db.metricsMutex.Unlock()
 
-	hashed := make([]index.Metric, len(metrics))
+	hashed := make([]index.Hash, len(metrics))
 
 	for i, metric := range metrics {
-		hash := index.HashMetric(metric)
+		hash := index.HashString(metric)
 		db.metrics[hash] = metric
 		hashed[i] = hash
 	}
@@ -261,7 +261,7 @@ func (db *Database) mapMetrics(metrics []string) []index.Metric {
 	return hashed
 }
 
-func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
+func (db *Database) unmapMetrics(metrics []index.Hash) ([]string, error) {
 	db.metricsMutex.RLock()
 	defer db.metricsMutex.RUnlock()
 
@@ -294,7 +294,7 @@ func New(queryLimit int, stats *util.Stats) *Database {
 
 		splitIndexes: make(map[string]*split.Index),
 
-		metrics: make(map[index.Metric]string),
+		metrics: make(map[index.Hash]string),
 
 		FullIndex: fullIndex,
 		TextIndex: textIndex,

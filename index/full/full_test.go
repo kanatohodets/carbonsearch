@@ -9,8 +9,8 @@ import (
 func TestQuery(t *testing.T) {
 	metricName := "server.hostname-1234"
 
-	metrics := index.HashMetrics([]string{metricName})
-	tags := index.HashTags([]string{"server-state:live", "server-dc:lhr"})
+	metrics := index.HashStrings([]string{metricName})
+	tags := index.HashStrings([]string{"server-state:live", "server-dc:lhr"})
 	in := NewIndex()
 
 	in.Add(tags, metrics)
@@ -21,7 +21,7 @@ func TestQuery(t *testing.T) {
 	}
 
 	if len(result) == 1 {
-		if result[0] != index.HashMetric(metricName) {
+		if result[0] != index.HashString(metricName) {
 			t.Errorf("full index test: %v was not found in the index", metricName)
 		}
 	} else {

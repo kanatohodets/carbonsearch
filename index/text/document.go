@@ -12,7 +12,7 @@ import (
 type pos int16
 
 type document struct {
-	metric index.Metric
+	metric index.Hash
 	pos    pos
 }
 

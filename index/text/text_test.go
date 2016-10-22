@@ -57,7 +57,7 @@ func TestAddMetrics(t *testing.T) {
 }
 
 func addMetricTestCase(t *testing.T, testName string, in *Index, metrics []string, testTokens map[string]int, expectError bool) {
-	hashes := index.HashMetrics(metrics)
+	hashes := index.HashStrings(metrics)
 	err := in.AddMetrics(metrics, hashes)
 	if expectError {
 		if err == nil {
@@ -97,7 +97,7 @@ func TestSearch(t *testing.T) {
 		"ron.crocodile.option",
 		"rose.daffodil.cron",
 	}
-	hashes := index.HashMetrics(metrics)
+	hashes := index.HashStrings(metrics)
 	err := in.AddMetrics(metrics, hashes)
 	if err != nil {
 		t.Errorf("addmetrics returned an error: %v", err)
@@ -142,9 +142,9 @@ func searchTest(t *testing.T, testName string, in *Index, query string, expected
 		return
 	}
 
-	expectedSet := map[index.Metric]string{}
+	expectedSet := map[index.Hash]string{}
 	for _, expected := range expectedResults {
-		expectedSet[index.HashMetric(expected)] = expected
+		expectedSet[index.HashString(expected)] = expected
 	}
 
 	for _, result := range results {
@@ -177,10 +177,10 @@ func BenchmarkAddMetrics(b *testing.B) {
 	in := NewIndex()
 
 	metricCases := make([][]string, b.N)
-	hashCases := make([][]index.Metric, b.N)
+	hashCases := make([][]index.Hash, b.N)
 	for i := 0; i < b.N; i++ {
 		metricCases[i] = test.GetMetricCorpus(10)
-		hashCases[i] = index.HashMetrics(metricCases[i])
+		hashCases[i] = index.HashStrings(metricCases[i])
 	}
 
 	b.ResetTimer()
@@ -198,7 +198,7 @@ func BenchmarkSearchWithResults(b *testing.B) {
 		"blorgfoo",
 		"mug_foo_ugh",
 	}
-	hashes := index.HashMetrics(metrics)
+	hashes := index.HashStrings(metrics)
 	err := in.AddMetrics(metrics, hashes)
 	if err != nil {
 		panic(err)
@@ -219,7 +219,7 @@ func BenchmarkSearchWithNoResults(b *testing.B) {
 		"blorgfoo",
 		"mug_foo_ugh",
 	}
-	hashes := index.HashMetrics(metrics)
+	hashes := index.HashStrings(metrics)
 	err := in.AddMetrics(metrics, hashes)
 	if err != nil {
 		panic(err)

@@ -24,7 +24,7 @@ func NewIndex() *Index {
 	}
 }
 
-func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
+func (ti *Index) Query(q *index.Query) ([]index.Hash, error) {
 	searches := []string{}
 	for _, tag := range q.Raw {
 		if strings.HasPrefix(tag, "text-match:") {
@@ -32,7 +32,7 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 			searches = append(searches, search)
 		}
 	}
-	metricSets := make([][]index.Metric, len(searches))
+	metricSets := make([][]index.Hash, len(searches))
 	for i, search := range searches {
 		results, err := ti.Search(search)
 		if err != nil {
@@ -40,14 +40,14 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 		}
 		metricSets[i] = results
 	}
-	return index.IntersectMetrics(metricSets), nil
+	return index.IntersectHashes(metricSets), nil
 }
 
 func (i *Index) Name() string {
 	return "text index"
 }
 
-func (ti *Index) Search(query string) ([]index.Metric, error) {
+func (ti *Index) Search(query string) ([]index.Hash, error) {
 	ti.mutex.RLock()
 	defer ti.mutex.RUnlock()
 	queryTokens, err := tokenizeQuery(query)
@@ -55,14 +55,14 @@ func (ti *Index) Search(query string) ([]index.Metric, error) {
 		return nil, fmt.Errorf("text.Search: error tokenizing %v: %v", query, err)
 	}
 
-	matching := map[index.Metric][]pos{}
-	skip := map[index.Metric]bool{}
+	matching := map[index.Hash][]pos{}
+	skip := map[index.Hash]bool{}
 	for i := 0; i < len(queryTokens); i++ {
 		token := queryTokens[i]
 		docs, ok := ti.postings[token.tri]
 		if !ok {
 			// this trigram isn't in the index anywhere, so don't bother doing any more work: there's no match
-			return []index.Metric{}, nil
+			return []index.Hash{}, nil
 		}
 
 		// pick out documents with a matching position
@@ -83,12 +83,12 @@ func (ti *Index) Search(query string) ([]index.Metric, error) {
 		}
 
 		if len(skip) == len(matching) {
-			return []index.Metric{}, nil
+			return []index.Hash{}, nil
 		}
 
 	}
 
-	res := make([]index.Metric, 0, len(matching)-len(skip))
+	res := make([]index.Hash, 0, len(matching)-len(skip))
 	for metric, hits := range matching {
 		if skip[metric] || len(hits) != len(queryTokens) {
 			continue
@@ -96,12 +96,12 @@ func (ti *Index) Search(query string) ([]index.Metric, error) {
 		res = append(res, metric)
 	}
 
-	index.SortMetrics(res)
+	index.SortHashes(res)
 
 	return res, nil
 }
 
-func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
+func (ti *Index) AddMetrics(metrics []string, hashes []index.Hash) error {
 	if len(metrics) == 0 {
 		return fmt.Errorf("text index: cannot add 0 metrics to text index")
 	}
