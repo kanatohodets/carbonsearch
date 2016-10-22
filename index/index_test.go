@@ -64,39 +64,20 @@ func TestSortMetrics(t *testing.T) {
 }
 
 func TestUnionMetrics(t *testing.T) {
-	metrics := [][]Metric{
-		HashMetrics([]string{"foo", "bar", "baz"}),
-		HashMetrics([]string{"qux", "bar"}),
-		HashMetrics([]string{"blorg"}),
-	}
+	unionMetricTest(t, "simple 2-way union", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+	}, []string{"foo", "bar", "baz", "qux"})
 
-	for _, metricList := range metrics {
-		SortMetrics(metricList)
-	}
+	unionMetricTest(t, "simple 3-way union", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+		{"blorg"},
+	}, []string{"foo", "bar", "baz", "qux", "blorg"})
+}
 
-	expectedList := HashMetrics([]string{"foo", "bar", "baz", "qux", "blorg"})
-	expected := map[Metric]bool{}
-
-	for _, metric := range expectedList {
-		expected[metric] = false
-	}
-
-	union := UnionMetrics(metrics)
-
-	for _, metric := range union {
-		_, ok := expected[metric]
-		if !ok {
-			t.Errorf("index test: metric union included %v, which was not expected", metric)
-			return
-		}
-		expected[metric] = true
-	}
-
-	for metric, found := range expected {
-		if !found {
-			t.Errorf("index test: metric union did NOT include %v, which was expected to be there", metric)
-		}
-	}
+func unionMetricTest(t *testing.T, testName string, rawSets [][]string, expectedResults []string) {
+	metricSetFuncTest(t, testName, UnionMetrics, rawSets, expectedResults)
 }
 
 func BenchmarkUnionMetricsSmallListSmallSets(b *testing.B) {
@@ -186,213 +167,210 @@ func BenchmarkIntersectMetricsLargeListSmallSets(b *testing.B) {
 }
 
 func TestUnionTags(t *testing.T) {
-	tags := [][]Tag{
-		HashTags([]string{"foo", "bar", "baz"}),
-		HashTags([]string{"qux", "bar"}),
-		HashTags([]string{"blorg"}),
-	}
+	unionTagTest(t, "simple 2-way union", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+	}, []string{"foo", "bar", "baz", "qux"})
 
-	for _, tagList := range tags {
-		SortTags(tagList)
-	}
-
-	expectedList := HashTags([]string{"foo", "bar", "baz", "qux", "blorg"})
-	expected := map[Tag]bool{}
-
-	for _, tag := range expectedList {
-		expected[tag] = false
-	}
-
-	union := UnionTags(tags)
-
-	for _, tag := range union {
-		_, ok := expected[tag]
-		if !ok {
-			t.Errorf("index test: tag union included %v, which was not expected", tag)
-			return
-		}
-		expected[tag] = true
-	}
-
-	for tag, found := range expected {
-		if !found {
-			t.Errorf("index test: tag union did NOT include %v, which was expected to be there", tag)
-		}
-	}
+	unionTagTest(t, "simple 3-way union", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+		{"blorg"},
+	}, []string{"foo", "bar", "baz", "qux", "blorg"})
 }
 
-// TODO(btyler) consolidate this into a testing table
+func unionTagTest(t *testing.T, testName string, rawSets [][]string, expectedResults []string) {
+	tagSetFuncTest(t, testName, UnionTags, rawSets, expectedResults)
+}
+
 func TestIntersectMetrics(t *testing.T) {
-	// basic intersection
-	metrics := [][]Metric{
-		HashMetrics([]string{"foo", "bar", "baz"}),
-		HashMetrics([]string{"qux", "bar"}),
-		HashMetrics([]string{"blorg", "bar"}),
-	}
+	// basic intersection, 2 sets
+	intersectMetricTest(t, "basic 2-way intersection", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+	}, []string{"bar"})
 
-	for _, metricList := range metrics {
-		SortMetrics(metricList)
-	}
-
-	expectedList := HashMetrics([]string{"bar"})
-	expected := map[Metric]bool{}
-
-	for _, metric := range expectedList {
-		expected[metric] = false
-	}
-
-	intersection := IntersectMetrics(metrics)
-
-	for _, metric := range intersection {
-		_, ok := expected[metric]
-		if !ok {
-			t.Errorf("index test: metric intersect included %v, which was not expected", metric)
-			return
-		}
-		expected[metric] = true
-	}
-
-	for metric, found := range expected {
-		if !found {
-			t.Errorf("index test: metric intersect did NOT include %v, which was expected to be there", metric)
-		}
-	}
+	// basic intersection, 3 sets
+	intersectMetricTest(t, "basic 3-way intersection", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+		{"blorg", "bar"},
+	}, []string{"bar"})
 
 	// empty intersection due to empty universe
-	intersection = IntersectMetrics([][]Metric{})
-	if len(intersection) > 0 {
-		t.Error("index test: metric intersect on empty set returned non-empty")
-	}
+	intersectMetricTest(t, "empty intersection, empty universe", [][]string{}, []string{})
 
 	// empty intersection due to one empty subset
-	metrics = [][]Metric{
-		HashMetrics([]string{"foo", "bar", "baz"}),
-		HashMetrics([]string{"qux", "bar"}),
-		HashMetrics([]string{}),
+	intersectMetricTest(t, "empty intersection, one empty subset", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+		{},
+	}, []string{})
+
+	// empty intersection because nothing shared
+	intersectMetricTest(t, "empty intersection, no overlap", [][]string{
+		{"foo"},
+		{"bar"},
+		{"baz", "blorg", "buzz", "pow", "kablooie", "whizbang", "rain", "always rain"},
+	}, []string{})
+
+	// intersection with one set (yields that set)
+	intersectMetricTest(t, "intersect just one item", [][]string{{"foo"}}, []string{"foo"})
+}
+
+func intersectMetricTest(t *testing.T, testName string, rawSets [][]string, expectedResults []string) {
+	metricSetFuncTest(t, testName, IntersectMetrics, rawSets, expectedResults)
+}
+
+// TODO(btyler): check that the testFunc returns things in correctly sorted order
+func metricSetFuncTest(t *testing.T, testName string, testFunc func([][]Metric) []Metric, rawSets [][]string, expectedResults []string) {
+	mapping := map[Metric]string{}
+	metricSets := make([][]Metric, len(rawSets), len(rawSets))
+	for i, rawSet := range rawSets {
+		metricSets[i] = make([]Metric, len(rawSet), len(rawSet))
+		for j, rawMetric := range rawSet {
+			hashed := HashMetric(rawMetric)
+			mapping[hashed] = rawMetric
+			metricSets[i][j] = hashed
+		}
+		SortMetrics(metricSets[i])
 	}
 
-	for _, metricList := range metrics {
-		SortMetrics(metricList)
-	}
-	intersection = IntersectMetrics(metrics)
-	if len(intersection) > 0 {
-		t.Error("index test: metric intersect returned non-empty, but it should have been empty")
-	}
-
-	// empty intersection due to no overlap
-	metrics = [][]Metric{
-		HashMetrics([]string{"foo"}),
-		HashMetrics([]string{"bar"}),
-		HashMetrics([]string{"baz", "blorg", "buzz", "pow", "kablooie", "whizbang", "rain", "always rain"}),
-	}
-	for _, metricList := range metrics {
-		SortMetrics(metricList)
-	}
-	intersection = IntersectMetrics(metrics)
-	if len(intersection) > 0 {
-		t.Error("index test: metric intersect returned non-empty, but it should have been empty")
+	expectedSet := map[string]bool{}
+	for _, res := range expectedResults {
+		_, ok := expectedSet[res]
+		if ok {
+			t.Errorf("%v: '%v' appears twice in the expected result set. this is an error in the test definition", testName, res)
+			return
+		}
+		expectedSet[res] = true
 	}
 
-	// intersection of just one thing
-	metrics = [][]Metric{HashMetrics([]string{"foo"})}
-	for _, metricList := range metrics {
-		SortMetrics(metricList)
+	resultSet := map[string]bool{}
+	for _, metric := range testFunc(metricSets) {
+		str, ok := mapping[metric]
+		if !ok {
+			t.Errorf("%v: tried to map %v back to a string, but there was no mapping for it", testName, metric)
+			return
+		}
+
+		_, ok = resultSet[str]
+		if ok {
+			t.Errorf("%v: '%v' appears twice in the true result set. all set functions should deduplicate.", testName, str)
+			return
+		}
+		resultSet[str] = true
 	}
-	intersection = IntersectMetrics(metrics)
-	if len(intersection) != 1 {
-		t.Error("index test: metric intersect returned more than 1 result for a universe of 1")
-		return
+
+	for expected, _ := range expectedSet {
+		_, ok := resultSet[expected]
+		if !ok {
+			t.Errorf("%s: expected '%v' in metric results, but it was missing!", testName, expected)
+			return
+		}
 	}
-	if intersection[0] != metrics[0][0] {
-		t.Error("index test: somehow a universe of 1 resulted in an intersection of 1, but not that 1. wtf o_o")
-		return
+
+	for found, _ := range resultSet {
+		_, ok := expectedSet[found]
+		if !ok {
+			t.Errorf("%s: found '%v' in metric results, but didn't expect it!", testName, found)
+			return
+		}
 	}
 }
 
-// TODO(btyler) consolidate this into a testing table
 func TestIntersectTags(t *testing.T) {
-	// basic intersection
-	tags := [][]Tag{
-		HashTags([]string{"foo", "bar", "baz"}),
-		HashTags([]string{"qux", "bar"}),
-		HashTags([]string{"blorg", "bar"}),
-	}
+	// basic intersection, 2 sets
+	intersectTagTest(t, "basic 2-way intersection", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+	}, []string{"bar"})
 
-	for _, tagList := range tags {
-		SortTags(tagList)
-	}
-
-	expectedList := HashTags([]string{"bar"})
-	expected := map[Tag]bool{}
-
-	for _, tag := range expectedList {
-		expected[tag] = false
-	}
-
-	intersection := IntersectTags(tags)
-
-	for _, tag := range intersection {
-		_, ok := expected[tag]
-		if !ok {
-			t.Errorf("index test: tag intersect included %v, which was not expected", tag)
-			return
-		}
-		expected[tag] = true
-	}
-
-	for tag, found := range expected {
-		if !found {
-			t.Errorf("index test: tag intersect did NOT include %v, which was expected to be there", tag)
-		}
-	}
+	// basic intersection, 3 sets
+	intersectTagTest(t, "basic 3-way intersection", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+		{"blorg", "bar"},
+	}, []string{"bar"})
 
 	// empty intersection due to empty universe
-	intersection = IntersectTags([][]Tag{})
-	if len(intersection) > 0 {
-		t.Error("index test: tag intersect on empty set returned non-empty")
-	}
+	intersectTagTest(t, "empty intersection, empty universe", [][]string{}, []string{})
 
 	// empty intersection due to one empty subset
-	tags = [][]Tag{
-		HashTags([]string{"foo", "bar", "baz"}),
-		HashTags([]string{"qux", "bar"}),
-		HashTags([]string{}),
+	intersectTagTest(t, "empty intersection, one empty subset", [][]string{
+		{"foo", "bar", "baz"},
+		{"qux", "bar"},
+		{},
+	}, []string{})
+
+	// empty intersection because nothing shared
+	intersectTagTest(t, "empty intersection, no overlap", [][]string{
+		{"foo"},
+		{"bar"},
+		{"baz", "blorg", "buzz", "pow", "kablooie", "whizbang", "rain", "always rain"},
+	}, []string{})
+
+	// intersection with one set (yields that set)
+	intersectTagTest(t, "intersect just one item", [][]string{{"foo"}}, []string{"foo"})
+}
+
+func intersectTagTest(t *testing.T, testName string, rawSets [][]string, expectedResults []string) {
+	tagSetFuncTest(t, testName, IntersectTags, rawSets, expectedResults)
+}
+
+// TODO(btyler): check that the testFunc returns things in correctly sorted order
+func tagSetFuncTest(t *testing.T, testName string, testFunc func([][]Tag) []Tag, rawSets [][]string, expectedResults []string) {
+	mapping := map[Tag]string{}
+	tagSets := make([][]Tag, len(rawSets), len(rawSets))
+	for i, rawSet := range rawSets {
+		tagSets[i] = make([]Tag, len(rawSet), len(rawSet))
+		for j, rawTag := range rawSet {
+			hashed := HashTag(rawTag)
+			mapping[hashed] = rawTag
+			tagSets[i][j] = hashed
+		}
+		SortTags(tagSets[i])
 	}
 
-	for _, tagList := range tags {
-		SortTags(tagList)
-	}
-	intersection = IntersectTags(tags)
-	if len(intersection) > 0 {
-		t.Error("index test: tag intersect returned non-empty, but it should have been empty")
-	}
-
-	// empty intersection due to no overlap
-	tags = [][]Tag{
-		HashTags([]string{"foo"}),
-		HashTags([]string{"bar"}),
-		HashTags([]string{"baz", "blorg", "buzz", "pow", "kablooie", "whizbang", "rain", "always rain"}),
-	}
-	for _, tagList := range tags {
-		SortTags(tagList)
-	}
-	intersection = IntersectTags(tags)
-	if len(intersection) > 0 {
-		t.Error("index test: tag intersect returned non-empty, but it should have been empty")
+	expectedSet := map[string]bool{}
+	for _, res := range expectedResults {
+		_, ok := expectedSet[res]
+		if ok {
+			t.Errorf("%v: '%v' appears twice in the expected result set. this is an error in the test definition", testName, res)
+			return
+		}
+		expectedSet[res] = true
 	}
 
-	// intersection of just one thing
-	tags = [][]Tag{HashTags([]string{"foo"})}
-	for _, tagList := range tags {
-		SortTags(tagList)
+	resultSet := map[string]bool{}
+	for _, tag := range testFunc(tagSets) {
+		str, ok := mapping[tag]
+		if !ok {
+			t.Errorf("%v: tried to map %v back to a string, but there was no mapping for it", testName, tag)
+			return
+		}
+
+		_, ok = resultSet[str]
+		if ok {
+			t.Errorf("%v: '%v' appears twice in the true result set. all set functions should deduplicate.", testName, str)
+			return
+		}
+		resultSet[str] = true
 	}
-	intersection = IntersectTags(tags)
-	if len(intersection) != 1 {
-		t.Error("index test: tag intersect returned more than 1 result for a universe of 1")
-		return
+
+	for expected, _ := range expectedSet {
+		_, ok := resultSet[expected]
+		if !ok {
+			t.Errorf("%s: expected '%v' in tag results, but it was missing!", testName, expected)
+			return
+		}
 	}
-	if intersection[0] != tags[0][0] {
-		t.Error("index test: somehow a universe of 1 resulted in an intersection of 1, but not that 1. wtf o_o")
-		return
+
+	for found, _ := range resultSet {
+		_, ok := expectedSet[found]
+		if !ok {
+			t.Errorf("%s: found '%v' in tag results, but didn't expect it!", testName, found)
+			return
+		}
 	}
 }
