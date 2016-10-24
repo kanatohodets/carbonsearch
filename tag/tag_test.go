@@ -47,3 +47,36 @@ func TestParse(t *testing.T) {
 		}
 	}
 }
+
+func TestParseKV(t *testing.T) {
+	validCases := map[string][]string{
+		"server-state:live":                          {"server", "state", "live"},
+		"discovery-status:live":                      {"discovery", "status", "live"},
+		"server-dc:lhr":                              {"server", "dc", "lhr"},
+		"lb-pool:www":                                {"lb", "pool", "www"},
+		"custom-favorites:btyler":                    {"custom", "favorites", "btyler"},
+		"server-interfaces:eth1:ip_address:10_1_2_3": {"server", "interfaces", "eth1:ip_address:10_1_2_3"},
+	}
+
+	for valid, expected := range validCases {
+		service, key, value, err := ParseKV(valid)
+		if err != nil {
+			t.Errorf("tag test: %q failed to parse: %q", valid, err)
+			continue
+		}
+
+		if service != expected[0] {
+			t.Errorf("tag test: %q ought to have service %q, but it has %q instead", valid, expected[0], service)
+		}
+
+		if key != expected[1] {
+			t.Errorf("tag test: %q ought to have key %q, but it has %q instead", valid, expected[1], key)
+		}
+
+		if value != expected[2] {
+			t.Errorf("tag test: %q ought to have value %q, but it has %q instead", valid, expected[2], value)
+		}
+
+	}
+	//NOTE(btyler) -- invalid cases are the same as for Parse. If that changes, add distinct invalid test cases for ParseKV.
+}
