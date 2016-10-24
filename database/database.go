@@ -270,7 +270,7 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 	for i, metric := range metrics {
 		str, ok := db.metrics[metric]
 		if !ok {
-			return nil, fmt.Errorf("database: the hashed metric '%d' has no mapping back to a string! this is awful!", metric)
+			return nil, fmt.Errorf("database: the hashed metric '%d' has no mapping back to a string! this is awful", metric)
 		}
 		stringMetrics[i] = str
 	}
