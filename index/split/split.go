@@ -28,6 +28,32 @@ the query process goes like this:
 3) take that intersection of join keys to find all the metrics associated with them
 4) success! return that set of metrics
 
+search for tag in
+	?
+	v
+ [left]
+	=
+	v
+value is lists of join keys
+	|
+	v
+< intersect those lists of join keys >
+	=
+	v
+search for join keys in
+	?
+	v
+ [right]
+	=
+	v
+value is lists of metrics
+	|
+	v
+< intersect those lists of metrics >
+	=
+	v
+return final intersected set
+
 */
 
 import (
