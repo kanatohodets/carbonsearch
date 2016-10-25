@@ -258,6 +258,7 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 	return valid
 }
 
+// mapMetrics converts string metrics to typed []uint64
 func (db *Database) mapMetrics(metrics []string) []index.Metric {
 	db.metricsMutex.Lock()
 	defer db.metricsMutex.Unlock()
@@ -273,6 +274,7 @@ func (db *Database) mapMetrics(metrics []string) []index.Metric {
 	return hashed
 }
 
+// unmapMetrics converts typed []uint64 metrics to string
 func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 	db.metricsMutex.RLock()
 	defer db.metricsMutex.RUnlock()
