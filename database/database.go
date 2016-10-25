@@ -14,6 +14,8 @@ import (
 	"github.com/kanatohodets/carbonsearch/util"
 )
 
+//TODO(nnuss): import "github.com/dgryski/carbonzipper/mlog"
+
 type Database struct {
 	stats             *util.Stats
 	serviceToIndex    map[string]index.Index
