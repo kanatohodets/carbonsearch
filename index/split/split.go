@@ -3,7 +3,7 @@ package split
 /*
 
 this package implements a simple split index. "split" because we store two mini-indexes
-and join them at search time using the join key for that index.
+{[left], [right]} and join them at search time using the join key for that index.
 
 join keys can be anything you use to associate some metrics with some tags. Our first
 common case was hostname: associating metrics sent by a host with
@@ -12,12 +12,12 @@ properties of that host (liveness, dc, rack ID, etc.)
 the two pieces of the index look like this (using hostname as an example):
 
 "left" side of the join (tags to $join_key, in this case hostnames)
-left: {
+[left]: {
 	server-state:live: [hostname-1234, hostname-1235, ...]
 }
 
 "right" side of the join ($join_key to metrics)
-right: {
+[right]: {
 	hostname-1234: ["server.hostname-1234.cpu.i7z", ...]
 }
 
