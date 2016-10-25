@@ -16,6 +16,7 @@ import (
 
 //TODO(nnuss): import "github.com/dgryski/carbonzipper/mlog"
 
+// Database abstracts over contained indexes
 type Database struct {
 	stats             *util.Stats
 	serviceToIndex    map[string]index.Index
@@ -33,6 +34,7 @@ type Database struct {
 	TextIndex *text.Index
 }
 
+// GetOrCreateSplitIndex returns a *split.Index for `join`, chosing an existing one if possible
 func (db *Database) GetOrCreateSplitIndex(join string) (*split.Index, error) {
 	index := db.GetSplitIndex(join)
 	if index == nil {
@@ -46,6 +48,7 @@ func (db *Database) GetOrCreateSplitIndex(join string) (*split.Index, error) {
 
 }
 
+// CreateSplitIndex creates a new split.Index and adds to the `db`
 func (db *Database) CreateSplitIndex(join string) (*split.Index, error) {
 	db.splitMutex.Lock()
 	defer db.splitMutex.Unlock()
@@ -61,6 +64,7 @@ func (db *Database) CreateSplitIndex(join string) (*split.Index, error) {
 	return index, nil
 }
 
+// GetSplitIndex returns the *split.Index for `join` in the db if one exists
 func (db *Database) GetSplitIndex(join string) *split.Index {
 	db.splitMutex.RLock()
 	defer db.splitMutex.RUnlock()
@@ -280,6 +284,7 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 	return stringMetrics, nil
 }
 
+// New initializes a new Database
 func New(queryLimit int, stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
