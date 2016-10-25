@@ -54,6 +54,12 @@ value is lists of metrics
 	v
 return final intersected set
 
+
+!<-LEFT-LEFT-LEFT-LEFT->!
+!   Tag  =>    JoinKey  !
+-------------------------------------
+            |  JoinKey    => Metric |
+            |<-RIGHT-RIGHT-RIGHT--->|
 */
 
 import (
