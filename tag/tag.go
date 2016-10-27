@@ -43,6 +43,7 @@ func validate(tag string) (int, int, error) {
 	serviceDelimiter := strings.Index(tag, "-")
 	kvMarker := strings.Index(tag, ":")
 	hasDots := strings.Index(tag, ".")
+	//TODO(nnuss): graphite allows '\' escaping dots
 	if hasDots != -1 {
 		return 0, 0, fmt.Errorf("tag: %q is an invalid tag: it contains full-stop characters, which will confuse graphite clients", tag)
 	}
