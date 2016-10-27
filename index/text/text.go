@@ -108,6 +108,8 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 
 	trigramDelta := map[trigram][]document{}
 	set := map[string]bool{}
+	// this gets reused for each metric
+	tokens := make([]token, 0, len(metrics[0]))
 	for i, metricName := range metrics {
 		if set[metricName] {
 			continue
@@ -115,7 +117,8 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 		set[metricName] = true
 
 		metric := hashes[i]
-		tokens, err := tokenizeWithMarkers(metricName)
+		// reset the slice length so we don't double-add anything
+		tokens, err := tokenizeWithMarkers(tokens[:0], metricName)
 		if err != nil {
 			return fmt.Errorf("text index: could not tokenize %v: %v", metricName, err)
 		}
@@ -129,15 +132,15 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 		SortDocuments(docs)
 	}
 
-	ti.mutex.Lock()
-	defer ti.mutex.Unlock()
 	for trigram, newDocs := range trigramDelta {
-		docs := ti.postings[trigram]
-		if len(docs) == 0 {
+		ti.mutex.Lock()
+		if len(ti.postings[trigram]) == 0 {
 			ti.postings[trigram] = newDocs
 		} else {
-			ti.postings[trigram] = UnionDocuments([][]document{ti.postings[trigram], newDocs})
+			union := make([]document, 0, len(ti.postings[trigram])+len(newDocs))
+			ti.postings[trigram] = UnionDocuments(union, ti.postings[trigram], newDocs)
 		}
+		ti.mutex.Unlock()
 	}
 	return nil
 }

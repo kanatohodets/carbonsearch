@@ -27,7 +27,7 @@ func TestTokenize(t *testing.T) {
 		"ar$",
 	}
 
-	res, err := tokenizeWithMarkers(input)
+	res, err := tokenizeWithMarkers(nil, input)
 	if err != nil {
 		t.Errorf("Tokenize returned an error: %v", err)
 		return

@@ -1,7 +1,6 @@
 package text
 
 import (
-	"container/heap"
 	"fmt"
 	"sort"
 
@@ -22,24 +21,21 @@ type token struct {
 }
 
 func tokenizeQuery(query string) ([]token, error) {
-	tokens := []token{}
-	return tokenize(query, tokens)
+	return tokenize(nil, query)
 }
 
-func tokenizeWithMarkers(term string) ([]token, error) {
+func tokenizeWithMarkers(tokens []token, term string) ([]token, error) {
 	if len(term) < n {
 		return nil, fmt.Errorf("%s is too short to search on", term)
 	}
 
 	// start with ^
-	tokens := []token{
-		token{
-			pos(-1),
-			trigramize([3]byte{'^', term[0], term[1]}),
-		},
-	}
+	tokens = append(tokens, token{
+		pos(-1),
+		trigramize([3]byte{'^', term[0], term[1]}),
+	})
 
-	tokens, err := tokenize(term, tokens)
+	tokens, err := tokenize(tokens, term)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +48,7 @@ func tokenizeWithMarkers(term string) ([]token, error) {
 	return tokens, nil
 }
 
-func tokenize(term string, tokens []token) ([]token, error) {
+func tokenize(tokens []token, term string) ([]token, error) {
 	if len(term) < n {
 		return nil, fmt.Errorf("%s is too short to search on", term)
 	}
@@ -74,12 +70,11 @@ func trigramize(s [3]byte) trigram {
 	return trigram(uint32(s[0])<<16 | uint32(s[1])<<8 | uint32(s[2]))
 }
 
-//TODO(btyler): IntersectDocuments, UnionDocuments, SortDocuments
+//TODO(btyler): IntersectDocuments
 func SortDocuments(docs []document) {
 	sort.Sort(docSlice(docs))
 }
 
-type documentSetsHeap [][]document
 type docSlice []document
 
 func (a docSlice) Len() int      { return len(a) }
@@ -92,44 +87,73 @@ func (a docSlice) Less(i, j int) bool {
 	}
 }
 
-func (h documentSetsHeap) Len() int { return len(h) }
-func (h documentSetsHeap) Less(i, j int) bool {
-	if h[i][0].metric == h[j][0].metric {
-		return h[i][0].pos < h[j][0].pos
-	} else {
-		return h[i][0].metric < h[j][0].metric
-	}
-}
-func (h documentSetsHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
-func (h *documentSetsHeap) Push(x interface{}) {
-	t := x.([]document)
-	*h = append(*h, t)
-}
+// lightly modified from github.com/dgryski/go-trigram to be a deduplicating
+// union for documents (metric + position)
+func UnionDocuments(result, a, b []document) []document {
+	var aidx, bidx int
 
-func (h *documentSetsHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
-}
+scan:
+	for aidx < len(a) && bidx < len(b) {
+		if a[aidx].metric == b[bidx].metric {
+			if len(result) == 0 {
+				result = append(result, a[aidx])
+			} else {
+				last := result[len(result)-1]
+				if a[aidx].metric != last.metric || (a[aidx].metric == last.metric && a[aidx].pos != last.pos) {
+					result = append(result, a[aidx])
+				}
+			}
 
-func UnionDocuments(docSets [][]document) []document {
-	h := documentSetsHeap(docSets)
-	heap.Init(&h)
-	set := []document{}
-	for h.Len() > 0 {
-		cur := h[0]
-		metric := cur[0]
-		if len(set) == 0 || set[len(set)-1] != metric {
-			set = append(set, metric)
+			aidx++
+			bidx++
+			if aidx == len(a) || bidx == len(b) {
+				break scan
+			}
 		}
-		if len(cur) == 1 {
-			heap.Pop(&h)
-		} else {
-			h[0] = cur[1:]
-			heap.Fix(&h, 0)
+
+		for a[aidx].metric < b[bidx].metric {
+			if len(result) == 0 {
+				result = append(result, a[aidx])
+			} else {
+				last := result[len(result)-1]
+				if a[aidx].metric != last.metric || (a[aidx].metric == last.metric && a[aidx].pos != last.pos) {
+					result = append(result, a[aidx])
+				}
+			}
+
+			aidx++
+			if aidx == len(a) {
+				break scan
+			}
+		}
+
+		for a[aidx].metric > b[bidx].metric {
+			if len(result) == 0 {
+				result = append(result, b[bidx])
+			} else {
+				last := result[len(result)-1]
+				if b[bidx].metric != last.metric || (b[bidx].metric == last.metric && b[bidx].pos != last.pos) {
+					result = append(result, b[bidx])
+				}
+			}
+
+			bidx++
+			if bidx == len(b) {
+				break scan
+			}
 		}
 	}
-	return set
+	// we may have broken out because we either finished b, or a, or both
+	// processes any remainders
+	for aidx < len(a) {
+		result = append(result, a[aidx])
+		aidx++
+	}
+
+	for bidx < len(b) {
+		result = append(result, b[bidx])
+		bidx++
+	}
+
+	return result
 }
