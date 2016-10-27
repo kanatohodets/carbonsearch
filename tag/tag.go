@@ -9,16 +9,17 @@ import (
 
 type Key uint64
 
-// Parse separates a "service-key:value" tag into "service" and "key:value". If the tag is malformed an error is returned.
-func Parse(tag string) (string, string, error) {
-	serviceMark, _, err := validate(tag)
+// Parse separates a "service-key:value" tag into "service", "key", and "value". If the tag is malformed an error is returned.
+func Parse(tag string) (string, string, string, error) {
+	serviceMark, kvMarker, err := validate(tag)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	service := tag[0:serviceMark]
-	kv := tag[serviceMark+1:]
-	return service, kv, nil
+	k := tag[serviceMark+1 : kvMarker]
+	v := tag[kvMarker+1:]
+	return service, k, v, nil
 }
 
 // WriteKey returns a hash representing the write identity for this tag. The
