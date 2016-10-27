@@ -72,7 +72,7 @@ func parseQuery(queryLimit int, query string) (map[string][]string, error) {
 
 	tagsByService := make(map[string][]string)
 	for _, queryTag := range tags {
-		service, _, _, err := tag.Parse(queryTag)
+		service, err := tag.ParseService(queryTag)
 		if err != nil {
 			return nil, err
 		}

@@ -22,6 +22,12 @@ func Parse(tag string) (string, string, string, error) {
 	return service, k, v, nil
 }
 
+// ParseService is sugar on Parse() when you only care about the service
+func ParseService(tag string) (string, error) {
+	s, _, _, err := Parse(tag)
+	return s, err
+}
+
 // WriteKey returns a hash representing the write identity for this tag. The
 // write identity is the portion of the tag that's needed to update a value ("service-key" in "service-key:value")
 func WriteKey(tag string) (Key, error) {
