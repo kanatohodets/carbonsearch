@@ -68,6 +68,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/tag"
@@ -115,6 +116,13 @@ func NewIndex(joinKey string) *Index {
 	}
 	n.tagToJoin.Store(make(map[index.Tag][]Join))
 	n.joinToMetric.Store(make(map[Join][]index.Metric))
+
+	go func(in *Index) {
+		for {
+			time.Sleep(time.Minute)
+			in.newGeneration()
+		}
+	}(&n)
 
 	return &n
 }
