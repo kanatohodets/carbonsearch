@@ -107,6 +107,7 @@ func (db *Database) GetSplitIndex(join string) *split.Index {
 func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	queriesByIndex := map[index.Index]*index.Query{}
 
+	// translate from text queries to index.Query and from text services to index.Index
 	db.serviceIndexMutex.RLock()
 	for service, tags := range tagsByService {
 		mappedIndex, ok := db.serviceToIndex[service]
@@ -156,6 +157,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 //NOTE(nnuss) -- to me this is logically the right-hand or downstream side of the si
 //TODO(btyler) -- do we want to auto-create indexes?
 func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
+	// only happens in the write-side
 	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
 		return fmt.Errorf("database: could not/get create index for %s: %s", msg.Key, err)
@@ -163,7 +165,9 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 
 	db.stats.MetricMessages.Add(1)
 
+	// []string => []Metric
 	metricHashes := db.mapMetrics(msg.Metrics)
+	// add metricHashes to right-side[msg.Value]
 	err = si.AddMetrics(msg.Value, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
