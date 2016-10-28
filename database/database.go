@@ -194,7 +194,7 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 
 	db.stats.TagMessages.Add(1)
 
-	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, si))
+	tags := db.validateServiceIndexPairs(msg.Tags, si)
 
 	err = si.AddTags(msg.Value, tags)
 	if err != nil {
