@@ -119,7 +119,14 @@ func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 			log.Println("ermg decoding problem :( ", err)
 			continue
 		}
-		db.InsertMetrics(msg)
+
+		// TODO(btyler): fix malformed messages and let this get caught by database validation
+		if msg.Value != "" && len(msg.Metrics) != 0 {
+			err := db.InsertMetrics(msg)
+			if err != nil {
+				log.Printf("kafka consumer: could not insert metrics: %v", err)
+			}
+		}
 	}
 }
 
@@ -130,7 +137,14 @@ func readTag(pc sarama.PartitionConsumer, db *database.Database) {
 			log.Println("ermg decoding problem :( ", err)
 			continue
 		}
-		db.InsertTags(msg)
+
+		// TODO(btyler): fix malformed messages and let this get caught by database validation
+		if msg.Value != "" && len(msg.Tags) != 0 {
+			err := db.InsertTags(msg)
+			if err != nil {
+				log.Printf("kafka consumer: could not insert tags: %v", err)
+			}
+		}
 	}
 }
 
@@ -141,6 +155,13 @@ func readCustom(pc sarama.PartitionConsumer, db *database.Database) {
 			log.Println("ermg decoding problem :( ", err)
 			continue
 		}
-		db.InsertCustom(msg)
+
+		// TODO(btyler): fix malformed messages and let this get caught by database validation
+		if len(msg.Tags) != 0 && len(msg.Metrics) != 0 {
+			err := db.InsertCustom(msg)
+			if err != nil {
+				log.Printf("kafka consumer: could not insert custom associations: %v", err)
+			}
+		}
 	}
 }

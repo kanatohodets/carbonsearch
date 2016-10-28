@@ -158,6 +158,13 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 //NOTE(nnuss) -- to me this is logically the right-hand or downstream side of the si
 //TODO(btyler) -- do we want to auto-create indexes?
 func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
+	if msg.Value == "" {
+		return fmt.Errorf("database: metric batch has an empty join key value")
+	}
+	if len(msg.Metrics) == 0 {
+		return fmt.Errorf("database: metric batch must have at least one metric")
+	}
+
 	// only happens in the write-side
 	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
@@ -186,6 +193,13 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 // InsertTags TODO:...
 //NOTE(nnuss) -- to me this is logically the left-hand or upstream side of the si
 func (db *Database) InsertTags(msg *m.KeyTag) error {
+	if msg.Value == "" {
+		return fmt.Errorf("database: tag batch has an empty join key value")
+	}
+	if len(msg.Tags) == 0 {
+		return fmt.Errorf("database: tag batch must have at least one tag")
+	}
+
 	si, err := db.GetOrCreateSplitIndex(msg.Key)
 	if err != nil {
 		return fmt.Errorf("database: could not get/create index for %q: %s", msg.Key, err)
@@ -206,6 +220,13 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 
 // InsertCustom makes a custom index association
 func (db *Database) InsertCustom(msg *m.TagMetric) error {
+	if len(msg.Metrics) == 0 {
+		return fmt.Errorf("database: custom batch must have at least one metric")
+	}
+	if len(msg.Tags) == 0 {
+		return fmt.Errorf("database: custom batch must have at least one tag")
+	}
+
 	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, db.FullIndex))
 
 	db.stats.CustomMessages.Add(1)
