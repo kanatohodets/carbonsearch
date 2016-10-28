@@ -100,7 +100,10 @@ func (db *Database) GetSplitIndex(join string) *split.Index {
 		}
 */
 
-// Query TODO:...
+// Query takes a set of "service-tag:value" queries organized by "service".
+// Eg. "service" => [ "service-tag:value", "service-tag:value" ]
+// The appropriate search index is queried for each "service"'s set of queries.
+// The ending set of results is intersected (AND) to produce the final results.
 func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	queriesByIndex := map[index.Index]*index.Query{}
 
