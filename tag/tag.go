@@ -3,8 +3,6 @@ package tag
 import (
 	"fmt"
 	"strings"
-
-	"github.com/kanatohodets/carbonsearch/util"
 )
 
 type Key uint64
@@ -26,17 +24,6 @@ func Parse(tag string) (string, string, string, error) {
 func ParseService(tag string) (string, error) {
 	s, _, _, err := Parse(tag)
 	return s, err
-}
-
-// WriteKey returns a hash representing the write identity for this tag. The
-// write identity is the portion of the tag that's needed to update a value ("service-key" in "service-key:value")
-func WriteKey(tag string) (Key, error) {
-	_, kvMark, err := validate(tag)
-	if err != nil {
-		return 0, err
-	}
-	serviceKey := tag[0:kvMark]
-	return Key(util.HashStr64(serviceKey)), nil
 }
 
 func validate(tag string) (int, int, error) {
