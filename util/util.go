@@ -27,6 +27,8 @@ type Stats struct {
 	ServicesByIndex *expvar.Map
 
 	SplitIndexes *expvar.Map
+
+	Uptime *expvar.Int
 }
 
 func InitStats() *Stats {
@@ -47,6 +49,8 @@ func InitStats() *Stats {
 		SplitIndexes: expvar.NewMap("SplitIndexes"),
 
 		ServicesByIndex: expvar.NewMap("ServicesByIndex"),
+
+		Uptime: expvar.NewInt("Uptime"),
 	}
 }
 

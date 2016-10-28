@@ -87,14 +87,13 @@ type Index struct {
 	joinKey    string
 	generation uint64
 
-	tagToJoin atomic.Value //map[index.Tag][]Join
-	tagCount  uint32
+	tagToJoin    atomic.Value //map[index.Tag][]Join
+	readableTags uint32
 
-	joinToMetric atomic.Value //map[Join][]index.Metric
-	joinCount    uint32
+	joinToMetric  atomic.Value //map[Join][]index.Metric
+	readableJoins uint32
 
-	metricCount uint32
-	// Mutable
+	readableMetrics uint32
 
 	// we want "service-key" => Join => "service-key:val"
 	// to be able to support "set" at the service-key level
@@ -102,9 +101,12 @@ type Index struct {
 	// The common case is there is 1 index.Tag
 	tagToJoinMutable map[tag.ServiceKey]map[Join][]index.Tag
 	tagMutex         sync.RWMutex
+	writtenTags      uint32
 
 	joinToMetricMutable map[Join][]index.Metric
 	metricMutex         sync.RWMutex
+	writtenJoins        uint32
+	writtenMetrics      uint32
 }
 
 func NewIndex(joinKey string) *Index {
@@ -125,8 +127,6 @@ func NewIndex(joinKey string) *Index {
 		}
 	}(&n)
 
-	log.Println("shiny new g", n.generation)
-
 	return &n
 }
 
@@ -143,10 +143,12 @@ func (si *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 	si.metricMutex.Lock()
 	defer si.metricMutex.Unlock()
 
+	writtenJoins := si.WrittenJoins()
 	metricList, ok := si.joinToMetricMutable[join]
 	if !ok {
 		metricList = []index.Metric{}
 		si.joinToMetricMutable[join] = metricList
+		si.SetWrittenJoins(writtenJoins + 1)
 	}
 
 	existingMember := make(map[index.Metric]bool)
@@ -155,17 +157,18 @@ func (si *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
 		existingMember[metric] = true
 	}
 
+	writtenMetrics := si.WrittenMetrics()
 	for _, metric := range metrics {
 		_, ok := existingMember[metric]
 		if !ok {
-			si.metricCount++
+			writtenMetrics++
 			metricList = append(metricList, metric)
 		}
 	}
 
 	index.SortMetrics(metricList)
 	si.joinToMetricMutable[join] = metricList
-
+	si.SetWrittenMetrics(writtenMetrics)
 	return nil
 }
 
@@ -215,21 +218,23 @@ func (si *Index) newGeneration() error {
 	joinToMetric := make(map[Join][]index.Metric)
 	si.metricMutex.RLock()
 	defer si.metricMutex.RUnlock()
-	var metricCount uint32
+	var readableMetrics uint32
 	for k, v := range si.joinToMetricMutable {
 		joinToMetric[k] = v
-		metricCount += uint32(len(v))
+		readableMetrics += uint32(len(v))
 	}
 
 	si.tagToJoin.Store(tagToJoin)
 	si.joinToMetric.Store(joinToMetric)
-	g := atomic.AddUint64(&si.generation, 1) // timestamp based maybe
-	_ = atomic.SwapUint32(&si.tagCount, uint32(len(tagToJoin)))
-	_ = atomic.SwapUint32(&si.joinCount, uint32(len(joinToMetric)))
-	_ = atomic.SwapUint32(&si.metricCount, metricCount)
 
+	// update stats
+	si.SetReadableTags(uint32(len(tagToJoin)))
+	si.SetReadableJoins(uint32(len(joinToMetric)))
+	si.SetReadableMetrics(readableMetrics)
+	si.IncrementGeneration()
+	g := si.Generation()
 	elapsed := time.Since(start)
-	log.Println("New generation", g, "took", elapsed)
+	log.Printf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
 
 	return nil
 }
@@ -272,14 +277,6 @@ func (si *Index) MetricIndex() map[Join][]index.Metric {
 
 func (si *Index) Name() string {
 	return si.joinKey
-}
-
-func (si *Index) TagSize() int {
-	return int(si.tagCount)
-}
-
-func (si *Index) MetricSize() int {
-	return int(si.metricCount)
 }
 
 func HashJoin(join string) Join {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/index"
@@ -179,8 +180,6 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	}
 
 	db.stats.MetricsIndexed.Add(int64(len(metricHashes)))
-	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", si.Name()), util.ExpInt(si.MetricSize()))
-
 	return nil
 }
 
@@ -202,8 +201,6 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 	}
 
 	db.stats.TagsIndexed.Add(int64(len(tags)))
-	db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags", si.Name()), util.ExpInt(si.TagSize()))
-
 	return nil
 }
 
@@ -313,8 +310,7 @@ func New(queryLimit int, stats *util.Stats) *Database {
 
 	textIndex := text.NewIndex()
 	serviceToIndex["text"] = textIndex
-
-	return &Database{
+	db := &Database{
 		stats:          stats,
 		serviceToIndex: serviceToIndex,
 		queryLimit:     queryLimit,
@@ -326,4 +322,24 @@ func New(queryLimit int, stats *util.Stats) *Database {
 		FullIndex: fullIndex,
 		TextIndex: textIndex,
 	}
+	go func() {
+		for {
+			time.Sleep(5 * time.Second)
+			db.stats.Uptime.Add(5)
+			db.splitMutex.RLock()
+			for _, si := range db.splitIndexes {
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-generation", si.Name()), util.ExpInt(si.Generation()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics-readable", si.Name()), util.ExpInt(si.ReadableMetrics()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics-written", si.Name()), util.ExpInt(si.WrittenMetrics()))
+
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags-readable", si.Name()), util.ExpInt(si.ReadableTags()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags-written", si.Name()), util.ExpInt(si.WrittenTags()))
+
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-readable", si.Name()), util.ExpInt(si.ReadableJoins()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-written", si.Name()), util.ExpInt(si.WrittenJoins()))
+			}
+			db.splitMutex.RUnlock()
+		}
+	}()
+	return db
 }
