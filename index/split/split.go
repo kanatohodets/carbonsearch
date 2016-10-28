@@ -65,6 +65,7 @@ return final intersected set
 import (
 	"container/heap"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -123,6 +124,8 @@ func NewIndex(joinKey string) *Index {
 			in.newGeneration()
 		}
 	}(&n)
+
+	log.Println("shiny new g", n.generation)
 
 	return &n
 }
@@ -197,6 +200,7 @@ func (si *Index) AddTags(rawJoin string, tags []string) error {
 
 // newGeneration copies the mutable indexes to new read-only ones and swaps out the existing ones.
 func (si *Index) newGeneration() error {
+	start := time.Now()
 	tagToJoin := make(map[index.Tag][]Join)
 	si.tagMutex.RLock()
 	defer si.tagMutex.RUnlock()
@@ -219,10 +223,13 @@ func (si *Index) newGeneration() error {
 
 	si.tagToJoin.Store(tagToJoin)
 	si.joinToMetric.Store(joinToMetric)
-	_ = atomic.AddUint64(&si.generation, 1) // timestamp based maybe
+	g := atomic.AddUint64(&si.generation, 1) // timestamp based maybe
 	_ = atomic.SwapUint32(&si.tagCount, uint32(len(tagToJoin)))
 	_ = atomic.SwapUint32(&si.joinCount, uint32(len(joinToMetric)))
 	_ = atomic.SwapUint32(&si.metricCount, metricCount)
+
+	elapsed := time.Since(start)
+	log.Println("New generation", g, "took", elapsed)
 
 	return nil
 }
