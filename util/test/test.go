@@ -33,6 +33,15 @@ func GetMetricCorpus(size int) []string {
 	return rwords(size, 120)
 }
 
+func GetDocumentPositions(size int) []int {
+	checkInit()
+	nums := []int{}
+	for i := 0; i < size; i++ {
+		nums = append(nums, rnd.Intn(120))
+	}
+	return nums
+}
+
 func GetTagCorpus(size int) []string {
 	checkInit()
 	return rwords(size, 15)
