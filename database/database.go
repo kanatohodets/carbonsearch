@@ -229,7 +229,7 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.Index) []string {
 	valid := []string{}
 	for _, queryTag := range tags {
-		service, _, err := tag.Parse(queryTag)
+		service, _, _, err := tag.Parse(queryTag)
 		if err != nil {
 			log.Println("database: tag parse error while validating service-tag pairs, skipping ", err)
 			continue
