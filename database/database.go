@@ -125,6 +125,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	db.serviceIndexMutex.RUnlock()
 
 	// query indexes, take intersection of metrics
+	// NOTE(nnuss): the first dimension of metricSets is len(queriesByIndex)
 	metricSets := [][]index.Metric{}
 	for targetIndex, query := range queriesByIndex {
 		metrics, err := targetIndex.Query(query)
@@ -299,6 +300,10 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 func New(queryLimit int, stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
+	// TODO(nnuss): These string literal mappings should one of:
+	// A. moved to constants
+	// B. made configuration
+	// C. made trivial consumers
 	fullIndex := full.NewIndex()
 	serviceToIndex["custom"] = fullIndex
 
