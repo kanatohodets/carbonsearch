@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+type ServiceKey uint64
 type Key uint64
 
 // Parse separates a "service-key:value" tag into "service", "key", and "value". If the tag is malformed an error is returned.

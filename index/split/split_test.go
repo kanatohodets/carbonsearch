@@ -47,11 +47,12 @@ func TestQuery(t *testing.T) {
 
 	in := NewIndex("host")
 	metrics := index.HashMetrics([]string{metricName})
-	tags := index.HashTags([]string{"server-state:live", "server-dc:lhr"})
+	tags := []string{"server-state:live", "server-dc:lhr"}
 	query := index.NewQuery([]string{"server-state:live"})
 
 	in.AddMetrics(host, metrics)
 	in.AddTags(host, tags)
+	_ = in.newGeneration()
 	result, err := in.Query(query)
 	if err != nil {
 		t.Error(err)
@@ -82,7 +83,7 @@ func BenchmarkSmallsetQuery(b *testing.B) {
 	metrics := index.HashMetrics([]string{metricName})
 
 	in.AddMetrics(host, metrics)
-	in.AddTags(host, index.HashTags(tags))
+	in.AddTags(host, tags)
 
 	query := index.NewQuery([]string{"server-state:live"})
 	b.ResetTimer()
@@ -102,7 +103,7 @@ func BenchmarkLargesetQuery(b *testing.B) {
 		if test.Rand().Intn(15) == 1 {
 			queryTerms = append(queryTerms, tags[test.Rand().Int()%len(tags)])
 		}
-		in.AddTags(host, index.HashTags(tags))
+		in.AddTags(host, tags)
 	}
 
 	query := index.NewQuery(queryTerms)
