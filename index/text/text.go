@@ -8,20 +8,31 @@ import (
 	"github.com/kanatohodets/carbonsearch/index"
 )
 
-var n int = 3
+const n = 3
 
 type trigram uint32
 
-type Index struct {
+// number of partitions for the metrics kafka topic
+const numShards = 8
+
+type shard struct {
 	postings map[trigram][]document
-	mutex    sync.RWMutex
-	count    int
+	mut      sync.RWMutex
+}
+
+type Index struct {
+	shards [numShards]shard
+	count  int
 }
 
 func NewIndex() *Index {
-	return &Index{
-		postings: make(map[trigram][]document),
+
+	var idx Index
+	for i := 0; i < numShards; i++ {
+		idx.shards[i].postings = map[trigram][]document{}
 	}
+
+	return &idx
 }
 
 func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
@@ -48,8 +59,6 @@ func (i *Index) Name() string {
 }
 
 func (ti *Index) Search(query string) ([]index.Metric, error) {
-	ti.mutex.RLock()
-	defer ti.mutex.RUnlock()
 	queryTokens, err := tokenizeQuery(query)
 	if err != nil {
 		return nil, fmt.Errorf("text.Search: error tokenizing %v: %v", query, err)
@@ -59,9 +68,13 @@ func (ti *Index) Search(query string) ([]index.Metric, error) {
 	skip := map[index.Metric]bool{}
 	for i := 0; i < len(queryTokens); i++ {
 		token := queryTokens[i]
-		docs, ok := ti.postings[token.tri]
+
+		shard := ti.Shard(token.tri)
+		shard.mut.RLock()
+		docs, ok := shard.postings[token.tri]
 		if !ok {
 			// this trigram isn't in the index anywhere, so don't bother doing any more work: there's no match
+			shard.mut.RUnlock()
 			return []index.Metric{}, nil
 		}
 
@@ -82,10 +95,11 @@ func (ti *Index) Search(query string) ([]index.Metric, error) {
 			}
 		}
 
+		shard.mut.RUnlock()
+
 		if len(skip) == len(matching) {
 			return []index.Metric{}, nil
 		}
-
 	}
 
 	res := make([]index.Metric, 0, len(matching)-len(skip))
@@ -133,14 +147,19 @@ func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
 	}
 
 	for trigram, newDocs := range trigramDelta {
-		ti.mutex.Lock()
-		if len(ti.postings[trigram]) == 0 {
-			ti.postings[trigram] = newDocs
+		shard := ti.Shard(trigram)
+		shard.mut.Lock()
+		if len(shard.postings[trigram]) == 0 {
+			shard.postings[trigram] = newDocs
 		} else {
-			union := make([]document, 0, len(ti.postings[trigram])+len(newDocs))
-			ti.postings[trigram] = UnionDocuments(union, ti.postings[trigram], newDocs)
+			union := make([]document, 0, len(shard.postings[trigram])+len(newDocs))
+			shard.postings[trigram] = UnionDocuments(union, shard.postings[trigram], newDocs)
 		}
-		ti.mutex.Unlock()
+		shard.mut.Unlock()
 	}
 	return nil
+}
+
+func (ti *Index) Shard(tri trigram) *shard {
+	return &ti.shards[tri%numShards]
 }

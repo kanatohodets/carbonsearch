@@ -162,10 +162,11 @@ func searchTest(t *testing.T, testName string, in *Index, query string, expected
 }
 
 func tokenCount(ti *Index, token trigram) (int, error) {
-	ti.mutex.RLock()
-	defer ti.mutex.RUnlock()
+	shard := ti.Shard(token)
+	shard.mut.RLock()
+	defer shard.mut.RUnlock()
 
-	post, ok := ti.postings[token]
+	post, ok := shard.postings[token]
 	if !ok {
 		return 0, nil
 	}
