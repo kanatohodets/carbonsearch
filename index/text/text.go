@@ -54,7 +54,7 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 	return index.IntersectMetrics(metricSets), nil
 }
 
-func (i *Index) Name() string {
+func (ti *Index) Name() string {
 	return "text index"
 }
 
