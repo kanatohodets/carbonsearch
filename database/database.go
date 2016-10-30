@@ -154,6 +154,18 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	return stringMetrics, nil
 }
 
+func (db *Database) MaterializeSplitIndexes() error {
+	db.splitMutex.RLock()
+	for _, index := range db.splitIndexes {
+		err := index.Materialize()
+		if err != nil {
+			return fmt.Errorf("database: error while materializing split index %v: %v", index.Name(), err)
+		}
+	}
+	db.splitMutex.RUnlock()
+	return nil
+}
+
 // InsertMetrics TODO:...
 //NOTE(nnuss) -- to me this is logically the right-hand or downstream side of the si
 //TODO(btyler) -- do we want to auto-create indexes?

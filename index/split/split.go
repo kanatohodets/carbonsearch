@@ -120,13 +120,6 @@ func NewIndex(joinKey string) *Index {
 	n.tagToJoin.Store(make(map[index.Tag][]Join))
 	n.joinToMetric.Store(make(map[Join][]index.Metric))
 
-	go func(in *Index) {
-		for {
-			time.Sleep(time.Minute)
-			in.newGeneration()
-		}
-	}(&n)
-
 	return &n
 }
 
@@ -201,8 +194,8 @@ func (si *Index) AddTags(rawJoin string, tags []string) error {
 	return nil
 }
 
-// newGeneration copies the mutable indexes to new read-only ones and swaps out the existing ones.
-func (si *Index) newGeneration() error {
+// Materialize copies the mutable indexes to new read-only ones and swaps out the existing ones.
+func (si *Index) Materialize() error {
 	start := time.Now()
 	tagToJoin := make(map[index.Tag][]Join)
 	si.tagMutex.RLock()

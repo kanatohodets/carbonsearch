@@ -16,6 +16,7 @@ import (
 	"runtime/pprof"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kanatohodets/carbonsearch/consumer"
 	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
@@ -194,10 +195,11 @@ func main() {
 	}
 
 	type Config struct {
-		Port        int               `yaml:"port"`
-		QueryLimit  int               `yaml:"query_limit"`
-		ResultLimit int               `yaml:"result_limit"`
-		Consumers   map[string]string `yaml:"consumers"`
+		Port              int               `yaml:"port"`
+		QueryLimit        int               `yaml:"query_limit"`
+		ResultLimit       int               `yaml:"result_limit"`
+		IndexRotationRate string            `yaml:"index_rotation_rate"`
+		Consumers         map[string]string `yaml:"consumers"`
 	}
 
 	conf := &Config{}
@@ -245,6 +247,21 @@ func main() {
 
 		consumers = append(consumers, consumer)
 	}
+
+	rotationRate, err := time.ParseDuration(conf.IndexRotationRate)
+	if err != nil {
+		printErrorAndExit(1, "config index_rotation_rate %q cannot be parsed as a duration. Please check https://golang.org/pkg/time/#ParseDuration for valid expressions", conf.IndexRotationRate)
+	}
+
+	go func() {
+		for {
+			time.Sleep(rotationRate)
+			err := db.MaterializeSplitIndexes()
+			if err != nil {
+				log.Printf("Error materializing indexes: %v", err)
+			}
+		}
+	}()
 
 	go func() {
 		http.HandleFunc("/metrics/find/", func(w http.ResponseWriter, req *http.Request) {

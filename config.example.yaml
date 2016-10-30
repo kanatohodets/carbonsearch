@@ -4,6 +4,10 @@ port: 8090
 result_limit: 20000
 # the maximum number of tags in a single query
 query_limit: 100
+# how often to materialize the 'read' side of the index
+# larger values mean less overall work for the system, at the cost of less
+# up-to-date query results.
+index_rotation_rate: "10s"
 # adding a line to 'consumers' implies that carbonsearch should use this consumer.
 # the value should be the absolute path to the config file for that consumer type
 consumers:

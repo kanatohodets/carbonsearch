@@ -52,7 +52,7 @@ func TestQuery(t *testing.T) {
 
 	in.AddMetrics(host, metrics)
 	in.AddTags(host, tags)
-	_ = in.newGeneration()
+	_ = in.Materialize()
 	result, err := in.Query(query)
 	if err != nil {
 		t.Error(err)
