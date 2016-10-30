@@ -22,7 +22,6 @@ import (
 	"github.com/kanatohodets/carbonsearch/consumer/httpapi"
 	"github.com/kanatohodets/carbonsearch/consumer/kafka"
 	"github.com/kanatohodets/carbonsearch/database"
-	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
 
 	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
@@ -37,58 +36,6 @@ var db *database.Database
 var stats *util.Stats
 
 var virtPrefix string
-
-// TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
-func parseQuery(queryLimit int, query string) (map[string][]string, error) {
-	/*
-		parse something like this:
-			'virt.v1.server-state:live.server-hw:intel.lb-pool:www'
-		into a map of 'tags' like this:
-			{
-				"server": [ "server-state:live", "server-hw:intel"],
-				"lb": ["lb-pool:www"]
-			}
-
-		where a 'tag' is a complete "prefix-key:value" item, such as "server-state:live".
-
-		these will be used to search the "left" side of our indexes: tag -> [$join_key, $join_key...]
-	*/
-
-	validExp := strings.HasPrefix(query, virtPrefix)
-	if !validExp {
-		return nil, fmt.Errorf("main: the query is not a valid virtual metric (must start with %q): %s", virtPrefix, query)
-	}
-
-	raw := strings.TrimPrefix(query, virtPrefix)
-	//NOTE(btyler) v1 only supports (implicit) 'and': otherwise we need precedence rules and...yuck
-	// additionally, you can get 'or' by adding more metrics to your query
-	tags := strings.Split(raw, ".")
-	if len(tags) > queryLimit {
-		return nil, fmt.Errorf(
-			"parseQuery: max query size is %v, but this query has %v tags. try again with a smaller query",
-			queryLimit,
-			len(tags),
-		)
-	}
-
-	tagsByService := make(map[string][]string)
-	for _, queryTag := range tags {
-		service, err := tag.ParseService(queryTag)
-		if err != nil {
-			return nil, err
-		}
-
-		stats.QueryTagsByService.Add(service, 1)
-
-		_, ok := tagsByService[service]
-		if !ok {
-			tagsByService[service] = []string{}
-		}
-
-		tagsByService[service] = append(tagsByService[service], queryTag)
-	}
-	return tagsByService, nil
-}
 
 func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, error) {
 	metrics, err := db.Query(query)
@@ -106,7 +53,7 @@ func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, e
 	return result, nil
 }
 
-func findHandler(queryLimit int, w http.ResponseWriter, req *http.Request) {
+func findHandler(w http.ResponseWriter, req *http.Request) {
 	uri, _ := url.ParseRequestURI(req.URL.RequestURI())
 	uriQuery := uri.Query()
 
@@ -133,7 +80,15 @@ func findHandler(queryLimit int, w http.ResponseWriter, req *http.Request) {
 	}
 
 	rawQuery := queries[0]
-	queryTags, err := parseQuery(queryLimit, rawQuery)
+	if !strings.HasPrefix(rawQuery, virtPrefix) {
+		err := fmt.Errorf("main: the query is not a valid virtual metric (must start with %q): %s", virtPrefix, rawQuery)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	trimmedQuery := strings.TrimPrefix(rawQuery, virtPrefix)
+
+	queryTags, err := db.ParseQuery(trimmedQuery)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -215,7 +170,7 @@ func main() {
 	stats = util.InitStats()
 
 	wg := &sync.WaitGroup{}
-	db = database.New(conf.ResultLimit, stats)
+	db = database.New(conf.QueryLimit, conf.ResultLimit, stats)
 	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){
@@ -264,9 +219,7 @@ func main() {
 	}()
 
 	go func() {
-		http.HandleFunc("/metrics/find/", func(w http.ResponseWriter, req *http.Request) {
-			findHandler(conf.QueryLimit, w, req)
-		})
+		http.HandleFunc("/metrics/find/", findHandler)
 
 		portStr := fmt.Sprintf(":%d", conf.Port)
 		log.Println("Starting carbonsearch", BuildVersion)

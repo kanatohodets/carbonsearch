@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +24,8 @@ type Database struct {
 	serviceToIndex    map[string]index.Index
 	serviceIndexMutex sync.RWMutex
 
-	queryLimit int
+	queryLimit  int
+	resultLimit int
 
 	splitIndexes map[string]*split.Index
 	splitMutex   sync.RWMutex
@@ -147,8 +149,8 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		return nil, err
 	}
 
-	if len(stringMetrics) > db.queryLimit {
-		return nil, fmt.Errorf("database: query selected %d metrics, which is over the limit of %d results in a single query", len(stringMetrics), db.queryLimit)
+	if len(stringMetrics) > db.resultLimit {
+		return nil, fmt.Errorf("database: query selected %d metrics, which is over the limit of %d results in a single query", len(stringMetrics), db.resultLimit)
 	}
 
 	return stringMetrics, nil
@@ -331,7 +333,7 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 }
 
 // New initializes a new Database
-func New(queryLimit int, stats *util.Stats) *Database {
+func New(queryLimit, resultLimit int, stats *util.Stats) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
 	// TODO(nnuss): These string literal mappings should one of:
@@ -346,7 +348,9 @@ func New(queryLimit int, stats *util.Stats) *Database {
 	db := &Database{
 		stats:          stats,
 		serviceToIndex: serviceToIndex,
-		queryLimit:     queryLimit,
+
+		queryLimit:  queryLimit,
+		resultLimit: resultLimit,
 
 		splitIndexes: make(map[string]*split.Index),
 
@@ -375,4 +379,50 @@ func New(queryLimit int, stats *util.Stats) *Database {
 		}
 	}()
 	return db
+}
+
+// TODO(btyler) convert tags to byte slices right away so hash functions don't need casting
+func (db *Database) ParseQuery(query string) (map[string][]string, error) {
+	/*
+		parse something like this:
+			'server-state:live.server-hw:intel.lb-pool:www'
+		into a map of 'tags' like this:
+			{
+				"server": [ "server-state:live", "server-hw:intel"],
+				"lb": ["lb-pool:www"]
+			}
+
+		where a 'tag' is a complete "prefix-key:value" item, such as "server-state:live".
+
+		these will be used to search the "left" side of our indexes: tag -> [$join_key, $join_key...]
+	*/
+
+	//NOTE(btyler) v1 only supports (implicit) 'and': otherwise we need precedence rules and...yuck
+	// additionally, you can get 'or' by adding more metrics to your query
+	tags := strings.Split(query, ".")
+	if len(tags) > db.queryLimit {
+		return nil, fmt.Errorf(
+			"database ParseQuery: max query size is %v, but this query has %v tags. try again with a smaller query",
+			db.queryLimit,
+			len(tags),
+		)
+	}
+
+	tagsByService := make(map[string][]string)
+	for _, queryTag := range tags {
+		service, err := tag.ParseService(queryTag)
+		if err != nil {
+			return nil, err
+		}
+
+		db.stats.QueryTagsByService.Add(service, 1)
+
+		_, ok := tagsByService[service]
+		if !ok {
+			tagsByService[service] = []string{}
+		}
+
+		tagsByService[service] = append(tagsByService[service], queryTag)
+	}
+	return tagsByService, nil
 }

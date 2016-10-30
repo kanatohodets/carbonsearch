@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -17,7 +18,8 @@ func TestMain(m *testing.M) {
 
 func TestQuery(t *testing.T) {
 	queryLimit := 10
-	db := New(queryLimit, stats)
+	resultLimit := 10
+	db := New(queryLimit, resultLimit, stats)
 
 	batches := []*m.TagMetric{
 		{
@@ -113,8 +115,9 @@ func TestQuery(t *testing.T) {
 }
 
 func TestTooBigQuery(t *testing.T) {
-	queryLimit := 1
-	db := New(queryLimit, stats)
+	queryLimit := 10
+	resultLimit := 1
+	db := New(queryLimit, resultLimit, stats)
 
 	batches := []*m.TagMetric{
 		{
@@ -154,4 +157,87 @@ func TestInsertMetrics(t *testing.T) {
 
 func TestInsertTags(t *testing.T) {
 
+}
+
+func TestParseQuery(t *testing.T) {
+	db := New(10, 10, stats)
+
+	parseTagsTestCase(t, db, "basic",
+		"server-state:live",
+		map[string][]string{
+			"server": {"server-state:live"},
+		},
+	)
+
+	parseTagsTestCase(t, db, "two tags, one service",
+		"server-state:live.server-hw:intel",
+		map[string][]string{
+			"server": {"server-state:live", "server-hw:intel"},
+		},
+	)
+
+	parseTagsTestCase(t, db, "two services, one tag each",
+		"server-state:live.lb-pool:www",
+		map[string][]string{
+			"server": {"server-state:live"},
+			"lb":     {"lb-pool:www"},
+		},
+	)
+
+	parseTagsTestCase(t, db, "two services, multiple tags",
+		"server-state:live.server-dc:us_east.lb-pool:www.lb-weight:10",
+		map[string][]string{
+			"server": {"server-state:live", "server-dc:us_east"},
+			"lb":     {"lb-pool:www", "lb-weight:10"},
+		},
+	)
+
+	// check query size limit
+	queryLimit := 1
+	db = New(queryLimit, 10, stats)
+	_, err := db.ParseQuery("servers-state:live.servers-dc:us_east")
+	if err == nil {
+		t.Errorf("oversize query failed to throw error")
+		return
+	}
+
+	expectedErr := fmt.Sprintf(
+		"database ParseQuery: max query size is %v, but this query has %v tags. try again with a smaller query",
+		queryLimit,
+		2,
+	)
+
+	if err.Error() != expectedErr {
+		t.Errorf("database test: expected an error about number of tags in query, got %q instead", err)
+		return
+	}
+}
+
+func parseTagsTestCase(t *testing.T, db *Database, testName string, query string, expected map[string][]string) {
+	parsed, err := db.ParseQuery(query)
+	if err != nil {
+		t.Errorf("%v parse error: %v", testName, err)
+		return
+	}
+
+	for service, expectedTags := range expected {
+		parsedTags, ok := parsed[service]
+		if !ok {
+			t.Errorf("%v: expected %v in parsed tags, but it wasn't there", testName, service)
+			return
+		}
+
+		if fmt.Sprintf("%v", expectedTags) != fmt.Sprintf("%v", parsedTags) {
+			t.Errorf("%v: parsed tags for %v are not what was expected! expected %v and got %v", testName, service, expectedTags, parsedTags)
+			return
+		}
+	}
+
+	for service, parsedTags := range parsed {
+		_, ok := expected[service]
+		if !ok {
+			t.Errorf("%v: service %s got %v in parsed tags, but it wasn't expected", testName, service, parsedTags)
+			return
+		}
+	}
 }
