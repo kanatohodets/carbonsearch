@@ -208,6 +208,10 @@ func (si *Index) Materialize() error {
 		}
 	}
 
+	for _, joinList := range tagToJoin {
+		SortJoins(joinList)
+	}
+
 	joinToMetric := make(map[Join][]index.Metric)
 	si.metricMutex.RLock()
 	defer si.metricMutex.RUnlock()
