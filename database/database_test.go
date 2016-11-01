@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"testing"
 
@@ -16,7 +17,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestQuery(t *testing.T) {
+func TestFullQuery(t *testing.T) {
 	queryLimit := 10
 	resultLimit := 10
 	db := New(queryLimit, resultLimit, stats)
@@ -114,7 +115,162 @@ func TestQuery(t *testing.T) {
 	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes
 }
 
-func TestTooBigQuery(t *testing.T) {
+func populateSplitIndex(t *testing.T, db *Database, testName, joinKey string, data map[string]map[string][]string) {
+	for joinValue, splitSides := range data {
+		metricMsg := &m.KeyMetric{
+			Key:     joinKey,
+			Value:   joinValue,
+			Metrics: splitSides["metrics"],
+		}
+
+		tagMsg := &m.KeyTag{
+			Key:   joinKey,
+			Value: joinValue,
+			Tags:  splitSides["tags"],
+		}
+
+		err := db.InsertMetrics(metricMsg)
+		if err != nil {
+			t.Errorf("%v: problem inserting metrics: %v", testName, err)
+			return
+		}
+
+		err = db.InsertTags(tagMsg)
+		if err != nil {
+			t.Errorf("%v: problem inserting tags: %v", testName, err)
+			return
+		}
+	}
+
+	err := db.MaterializeSplitIndexes()
+	if err != nil {
+		t.Errorf("%v problem materializing indexes: %v", testName, err)
+		return
+	}
+}
+
+func queryTest(t *testing.T, db *Database, testName string, query string, expectedMetrics []string) {
+	parsedQuery, err := db.ParseQuery(query)
+	if err != nil {
+		t.Errorf("%v: error parsing query (this is not what this test is testing, so probably a buggy test): %v", testName, err)
+		return
+	}
+
+	expectedSet := map[string]bool{}
+	for _, metric := range expectedMetrics {
+		expectedSet[metric] = true
+	}
+
+	result, err := db.Query(parsedQuery)
+
+	resultSet := map[string]bool{}
+	for _, metric := range result {
+		resultSet[metric] = true
+		_, ok := expectedSet[metric]
+		if !ok {
+			t.Errorf("%v: found %q in the result, but we shouldn't have!", testName, metric)
+			return
+		}
+	}
+
+	for expected := range expectedSet {
+		_, ok := resultSet[expected]
+		if !ok {
+			t.Errorf("%v: expected to find %q in the query result, but it wasn't there!", testName, expected)
+			return
+		}
+	}
+
+	if fmt.Sprintf("%v", result) != fmt.Sprintf("%v", expectedMetrics) {
+		t.Errorf("%v: expected and result metrics are the same, but in a different order. this test might be excessive.", testName)
+		log.Printf("%v expected: %q", testName, expectedMetrics)
+		log.Printf("%v result: %q", testName, result)
+		return
+	}
+}
+
+func TestSplitQuery(t *testing.T) {
+	queryLimit := 10
+	resultLimit := 10
+	db := New(queryLimit, resultLimit, stats)
+
+	populateSplitIndex(t, db, "basic split queries",
+		"fqdn",
+		map[string]map[string][]string{
+			"foohost-4335.staging.example.com": map[string][]string{
+				"metrics": []string{
+					"monitors.was_the_site_up",
+					"server.foohost-4335_staging_example_com.cpu.loadavg",
+				},
+				"tags": []string{
+					"servers-dc:us_west",
+					"servers-status:borked",
+				},
+			},
+			"barhost-1000.prod.example.com": map[string][]string{
+				"metrics": []string{
+					"server.barhost-1000_prod_example_com.tcp.tx_byte",
+				},
+				"tags": []string{
+					"servers-dc:us_west",
+					"servers-status:live",
+				},
+			},
+		},
+	)
+	splitIndexQueryTests(t, db, "basic")
+
+	// regenerate index adding nothing
+	populateSplitIndex(t, db, "second generation",
+		"fqdn",
+		map[string]map[string][]string{},
+	)
+	splitIndexQueryTests(t, db, "second generation, empty index add")
+
+	// regenerate index adding different stuff
+	populateSplitIndex(t, db, "third generation",
+		"fqdn",
+		map[string]map[string][]string{
+			"qux-03.prod.example.com": map[string][]string{
+				"metrics": []string{
+					"server.barhost-1000_prod_example_com.tcp.tx_byte",
+				},
+				"tags": []string{
+					"servers-dc:us_west",
+					"servers-status:live",
+				},
+			},
+		},
+	)
+	splitIndexQueryTests(t, db, "third generation, add things")
+
+	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes
+}
+
+func splitIndexQueryTests(t *testing.T, db *Database, prefix string) {
+	queryTest(t, db, fmt.Sprintf("%v single tag query, one split index", prefix),
+		"servers-dc:us_west",
+		[]string{
+			"server.barhost-1000_prod_example_com.tcp.tx_byte",
+			"monitors.was_the_site_up",
+			"server.foohost-4335_staging_example_com.cpu.loadavg",
+		},
+	)
+
+	queryTest(t, db, fmt.Sprintf("%v zero result query", prefix),
+		"custom-foo:bar",
+		[]string{},
+	)
+
+	queryTest(t, db, fmt.Sprintf("%v single result query", prefix),
+		"servers-status:live",
+		[]string{
+			"server.barhost-1000_prod_example_com.tcp.tx_byte",
+		},
+	)
+}
+
+func TestTooVagueQuery(t *testing.T) {
 	queryLimit := 10
 	resultLimit := 1
 	db := New(queryLimit, resultLimit, stats)
