@@ -9,9 +9,9 @@ import (
 	"github.com/dgryski/carbonzipper/mlog"
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/index"
+	"github.com/kanatohodets/carbonsearch/index/bloom"
 	"github.com/kanatohodets/carbonsearch/index/full"
 	"github.com/kanatohodets/carbonsearch/index/split"
-	"github.com/kanatohodets/carbonsearch/index/text"
 	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
 )
@@ -38,7 +38,7 @@ type Database struct {
 	fullIndexService string
 
 	FullIndex *full.Index
-	TextIndex *text.Index
+	TextIndex *bloom.Index
 }
 
 /*
@@ -292,7 +292,7 @@ func New(
 		serviceToIndex[fullIndexService] = fullIndex
 	}
 
-	textIndex := text.NewIndex()
+	textIndex := bloom.NewIndex()
 	if textIndexService != "" {
 		serviceToIndex[textIndexService] = textIndex
 	}
