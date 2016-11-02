@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
+	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/util"
 )
 
@@ -181,8 +182,15 @@ func queryTest(t *testing.T, db *Database, testName string, query string, expect
 		}
 	}
 
-	if fmt.Sprintf("%v", result) != fmt.Sprintf("%v", expectedMetrics) {
-		t.Errorf("%v: expected and result metrics are the same, but in a different order. this test might be excessive.", testName)
+	// ensure results are sorted. breaking this is a symptom that some of the
+	// sets are stored unsorted at some point, which breaks a boatload of
+	// assumptions
+	expectedHashes := index.HashMetrics(expectedMetrics)
+	index.SortMetrics(expectedHashes)
+
+	resultHashes := index.HashMetrics(result)
+	if fmt.Sprintf("%v", expectedHashes) != fmt.Sprintf("%v", resultHashes) {
+		t.Errorf("%v: expected and result metrics are the same, but in a different order!", testName)
 		log.Printf("%v expected: %q", testName, expectedMetrics)
 		log.Printf("%v result: %q", testName, result)
 		return
@@ -199,12 +207,15 @@ func TestSplitQuery(t *testing.T) {
 		map[string]map[string][]string{
 			"foohost-4335.staging.example.com": map[string][]string{
 				"metrics": []string{
-					"monitors.was_the_site_up",
+					// the ordering of these two is important: they expose a bug if metrics are not sorted on ingest
 					"server.foohost-4335_staging_example_com.cpu.loadavg",
+					"monitors.was_the_site_up",
 				},
 				"tags": []string{
+					"servers-hw:shiny",
 					"servers-dc:us_west",
-					"servers-status:borked",
+					"servers-status:live",
+					"servers-roles:foo",
 				},
 			},
 			"barhost-1000.prod.example.com": map[string][]string{
@@ -212,13 +223,26 @@ func TestSplitQuery(t *testing.T) {
 					"server.barhost-1000_prod_example_com.tcp.tx_byte",
 				},
 				"tags": []string{
+					"servers-hw:shiny",
 					"servers-dc:us_west",
 					"servers-status:live",
+					"servers-roles:bar",
+				},
+			},
+			"quxhost-0003.dev.example.com": map[string][]string{
+				"metrics": []string{
+					"server.quxhost-0003_dev_example_com.iowait.5m",
+				},
+				"tags": []string{
+					"servers-hw:rusty",
+					"servers-dc:us_east",
+					"servers-status:borked",
+					"servers-roles:qux",
 				},
 			},
 		},
 	)
-	splitIndexQueryTests(t, db, "basic")
+	splitIndexQueryTests(t, db, "first generation")
 
 	// regenerate index adding nothing
 	populateSplitIndex(t, db, "second generation",
@@ -244,6 +268,15 @@ func TestSplitQuery(t *testing.T) {
 	)
 	splitIndexQueryTests(t, db, "third generation, add things")
 
+	// regenerate + retest many times over: every generation iterates over the maps in question, and thus is a chance for missing sorts to be caught
+	for i := 0; i < 25; i++ {
+		populateSplitIndex(t, db, fmt.Sprintf("mega generation %v", i),
+			"fqdn",
+			map[string]map[string][]string{},
+		)
+		splitIndexQueryTests(t, db, fmt.Sprintf("looking for broken ordering in generation %v", i))
+	}
+
 	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes
 }
 
@@ -266,8 +299,20 @@ func splitIndexQueryTests(t *testing.T, db *Database, prefix string) {
 		"servers-status:live",
 		[]string{
 			"server.barhost-1000_prod_example_com.tcp.tx_byte",
+			"server.foohost-4335_staging_example_com.cpu.loadavg",
+			"monitors.was_the_site_up",
 		},
 	)
+
+	queryTest(t, db, fmt.Sprintf("%v single result query", prefix),
+		"servers-status:live.servers-hw:shiny.servers-dc:us_west",
+		[]string{
+			"server.barhost-1000_prod_example_com.tcp.tx_byte",
+			"server.foohost-4335_staging_example_com.cpu.loadavg",
+			"monitors.was_the_site_up",
+		},
+	)
+
 }
 
 func TestTooVagueQuery(t *testing.T) {
