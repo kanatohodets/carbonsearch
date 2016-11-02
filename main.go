@@ -14,8 +14,10 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kanatohodets/carbonsearch/consumer"
@@ -26,16 +28,64 @@ import (
 
 	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/peterbourgon/g2g"
 )
 
 // BuildVersion is provided to be overridden at build time. Eg. go build -ldflags -X 'main.BuildVersion=...'
 var BuildVersion = "(development build)"
+
+// Config hold configuration variables
+var Config = struct {
+	Buckets           int               `yaml:"buckets"`
+	Port              int               `yaml:"port"`
+	QueryLimit        int               `yaml:"query_limit"`
+	ResultLimit       int               `yaml:"result_limit"`
+	IndexRotationRate string            `yaml:"index_rotation_rate"`
+	GraphiteHost      string            `yaml:"graphite_host"`
+	Consumers         map[string]string `yaml:"consumers"`
+}{
+	Port: 8070,
+
+	Buckets: 10,
+
+	QueryLimit:  100,
+	ResultLimit: 20000,
+
+	IndexRotationRate: "60s",
+}
 
 var db *database.Database
 
 var stats *util.Stats
 
 var virtPrefix string
+
+var timeBuckets []int64
+
+type bucketEntry int
+
+func (b bucketEntry) String() string {
+	return strconv.Itoa(int(atomic.LoadInt64(&timeBuckets[b])))
+}
+
+func renderTimeBuckets() interface{} {
+	return timeBuckets
+}
+
+func bucketRequestTimes(req *http.Request, t time.Duration) {
+
+	ms := t.Nanoseconds() / int64(time.Millisecond)
+
+	bucket := int(ms / 100)
+
+	if bucket < Config.Buckets {
+		atomic.AddInt64(&timeBuckets[bucket], 1)
+	} else {
+		// Too big? Increment overflow bucket and log
+		atomic.AddInt64(&timeBuckets[Config.Buckets], 1)
+		log.Printf("Slow Request: %s: %s", t.String(), req.URL.String())
+	}
+}
 
 func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, error) {
 	metrics, err := db.Query(query)
@@ -124,6 +174,7 @@ func main() {
 	blockingProfile := flag.String("blockProfile", "", "Path to `block profile output file`. Block profiler disabled if empty.")
 	cpuProfile := flag.String("cpuProfile", "", "Path to `cpu profile output file`. CPU profiler disabled if empty.")
 	virtPrefix = *flag.String("prefix", "virt.v1.", "Query prefix")
+	interval := flag.Duration("i", 0, "interval to report internal statistics to graphite")
 	flag.Parse()
 
 	if *configPath == "" {
@@ -149,28 +200,46 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	type Config struct {
-		Port              int               `yaml:"port"`
-		QueryLimit        int               `yaml:"query_limit"`
-		ResultLimit       int               `yaml:"result_limit"`
-		IndexRotationRate string            `yaml:"index_rotation_rate"`
-		Consumers         map[string]string `yaml:"consumers"`
-	}
-
-	conf := &Config{}
-	err := util.ReadConfig(*configPath, conf)
+	err := util.ReadConfig(*configPath, &Config)
 	if err != nil {
 		printErrorAndExit(1, "could not read config: %s", err)
 	}
 
-	if len(conf.Consumers) == 0 {
+	if len(Config.Consumers) == 0 {
 		printErrorAndExit(1, "config doesn't have any consumers. carbonsearch won't have anything to search on. Take a peek in %q, see if it looks like it should", *configPath)
 	}
 
 	stats = util.InitStats()
 
+	// nothing in the config? check the environment
+	if Config.GraphiteHost == "" {
+		if host := os.Getenv("GRAPHITEHOST") + ":" + os.Getenv("GRAPHITEPORT"); host != ":" {
+			Config.GraphiteHost = host
+		}
+	}
+	if Config.GraphiteHost != "" {
+		log.Println("Using graphite host", Config.GraphiteHost)
+		graphite := g2g.NewGraphite(Config.GraphiteHost, *interval, 10*time.Second)
+
+		hostname, _ := os.Hostname()
+		hostname = strings.Replace(hostname, ".", "_", -1)
+
+		graphite.Register(fmt.Sprintf("carbon.search.%s.find_requests", hostname), stats.QueriesHandled)
+		// ...
+
+		// +1 to track every over the number of buckets we track
+		timeBuckets = make([]int64, Config.Buckets+1)
+
+		for i := 0; i <= Config.Buckets; i++ {
+			graphite.Register(fmt.Sprintf("carbon.search.%s.requests_in_%dms_to_%dms", hostname, i*100, (i+1)*100), bucketEntry(i))
+		}
+		graphite.Register(fmt.Sprintf("carbon.search.%s.requests_in_%dms_to_infinity", hostname, Config.Buckets*100), bucketEntry(Config.Buckets))
+
+		// carbonzipper/mstats
+	}
+
 	wg := &sync.WaitGroup{}
-	db = database.New(conf.QueryLimit, conf.ResultLimit, stats)
+	db = database.New(Config.QueryLimit, Config.ResultLimit, stats)
 	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){
@@ -185,7 +254,7 @@ func main() {
 	}
 
 	consumers := []consumer.Consumer{}
-	for consumerName, consumerConfigPath := range conf.Consumers {
+	for consumerName, consumerConfigPath := range Config.Consumers {
 		constructor, ok := constructors[consumerName]
 		if !ok {
 			printErrorAndExit(1, "carbonsearch doesn't know how to create consumer %q. talk to the authors, or remove %q from the list of consumers in %q", consumerName, consumerName, *configPath)
@@ -203,9 +272,9 @@ func main() {
 		consumers = append(consumers, consumer)
 	}
 
-	rotationRate, err := time.ParseDuration(conf.IndexRotationRate)
+	rotationRate, err := time.ParseDuration(Config.IndexRotationRate)
 	if err != nil {
-		printErrorAndExit(1, "config index_rotation_rate %q cannot be parsed as a duration. Please check https://golang.org/pkg/time/#ParseDuration for valid expressions", conf.IndexRotationRate)
+		printErrorAndExit(1, "config index_rotation_rate %q cannot be parsed as a duration. Please check https://golang.org/pkg/time/#ParseDuration for valid expressions", Config.IndexRotationRate)
 	}
 
 	go func() {
@@ -221,7 +290,7 @@ func main() {
 	go func() {
 		http.HandleFunc("/metrics/find/", findHandler)
 
-		portStr := fmt.Sprintf(":%d", conf.Port)
+		portStr := fmt.Sprintf(":%d", Config.Port)
 		log.Println("Starting carbonsearch", BuildVersion)
 		log.Printf("listening on %s\n", portStr)
 		log.Println(http.ListenAndServe(portStr, nil))
