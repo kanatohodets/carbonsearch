@@ -27,6 +27,8 @@ import (
 	"github.com/kanatohodets/carbonsearch/util"
 
 	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+	"github.com/dgryski/carbonzipper/mstats"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/peterbourgon/g2g"
 )
@@ -224,8 +226,15 @@ func main() {
 		hostname, _ := os.Hostname()
 		hostname = strings.Replace(hostname, ".", "_", -1)
 
-		graphite.Register(fmt.Sprintf("carbon.search.%s.find_requests", hostname), stats.QueriesHandled)
-		// ...
+		graphite.Register(fmt.Sprintf("carbon.search.%s.custom_messages", hostname), stats.CustomMessages)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.metric_indexed", hostname), stats.MetricsIndexed)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.metric_messages", hostname), stats.MetricMessages)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.requests", hostname), stats.QueriesHandled)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.tag_indexed", hostname), stats.TagsIndexed)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.tag_messages", hostname), stats.TagMessages)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.uptime", hostname), stats.Uptime)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.full_tags", hostname), stats.FullIndexTags)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.full_metrics", hostname), stats.FullIndexMetrics)
 
 		// +1 to track every over the number of buckets we track
 		timeBuckets = make([]int64, Config.Buckets+1)
@@ -235,7 +244,13 @@ func main() {
 		}
 		graphite.Register(fmt.Sprintf("carbon.search.%s.requests_in_%dms_to_infinity", hostname, Config.Buckets*100), bucketEntry(Config.Buckets))
 
-		// carbonzipper/mstats
+		go mstats.Start(*interval)
+
+		graphite.Register(fmt.Sprintf("carbon.search.%s.alloc", hostname), &mstats.Alloc)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.total_alloc", hostname), &mstats.TotalAlloc)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.num_gc", hostname), &mstats.NumGC)
+		graphite.Register(fmt.Sprintf("carbon.search.%s.pause_ns", hostname), &mstats.PauseNS)
+
 	}
 
 	wg := &sync.WaitGroup{}
