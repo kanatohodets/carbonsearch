@@ -216,9 +216,12 @@ func (si *Index) Materialize() error {
 	si.metricMutex.RLock()
 	defer si.metricMutex.RUnlock()
 	var readableMetrics uint32
-	for k, v := range si.joinToMetricMutable {
-		joinToMetric[k] = v
-		readableMetrics += uint32(len(v))
+	// must copy data to avoid sharing a slice header between read and write
+	for join, metrics := range si.joinToMetricMutable {
+		copied := make([]index.Metric, len(metrics))
+		copy(copied, metrics)
+		joinToMetric[join] = copied
+		readableMetrics += uint32(len(metrics))
 	}
 
 	si.tagToJoin.Store(tagToJoin)
