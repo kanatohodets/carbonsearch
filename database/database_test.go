@@ -191,8 +191,8 @@ func queryTest(t *testing.T, db *Database, testName string, query string, expect
 	resultHashes := index.HashMetrics(result)
 	if fmt.Sprintf("%v", expectedHashes) != fmt.Sprintf("%v", resultHashes) {
 		t.Errorf("%v: expected and result metrics are the same, but in a different order!", testName)
-		log.Printf("%v expected: %q", testName, expectedMetrics)
-		log.Printf("%v result: %q", testName, result)
+		logger.Logf("%v expected: %q", testName, expectedMetrics)
+		logger.Logf("%v result: %q", testName, result)
 		return
 	}
 }

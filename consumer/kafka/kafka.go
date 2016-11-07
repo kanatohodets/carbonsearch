@@ -3,15 +3,17 @@ package kafka
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 
+	"github.com/dgryski/carbonzipper/mlog"
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/database"
 	"github.com/kanatohodets/carbonsearch/util"
 
 	"github.com/Shopify/sarama"
 )
+
+var logger mlog.Level
 
 type KafkaConfig struct {
 	Offset       string            `yaml:"offset"`
@@ -116,7 +118,7 @@ func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
 		var msg *m.KeyMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
-			log.Println("ermg decoding problem :( ", err)
+			logger.Logln("ermg decoding problem :( ", err)
 			continue
 		}
 
@@ -124,7 +126,7 @@ func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 		if msg.Value != "" && len(msg.Metrics) != 0 {
 			err := db.InsertMetrics(msg)
 			if err != nil {
-				log.Printf("kafka consumer: could not insert metrics: %v", err)
+				logger.Logf("kafka consumer: could not insert metrics: %v", err)
 			}
 		}
 	}
@@ -134,7 +136,7 @@ func readTag(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
 		var msg *m.KeyTag
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
-			log.Println("ermg decoding problem :( ", err)
+			logger.Logln("ermg decoding problem :( ", err)
 			continue
 		}
 
@@ -142,7 +144,7 @@ func readTag(pc sarama.PartitionConsumer, db *database.Database) {
 		if msg.Value != "" && len(msg.Tags) != 0 {
 			err := db.InsertTags(msg)
 			if err != nil {
-				log.Printf("kafka consumer: could not insert tags: %v", err)
+				logger.Logf("kafka consumer: could not insert tags: %v", err)
 			}
 		}
 	}
@@ -152,7 +154,7 @@ func readCustom(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
 		var msg *m.TagMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
-			log.Println("ermg decoding problem :( ", err)
+			logger.Logln("ermg decoding problem :( ", err)
 			continue
 		}
 
@@ -160,7 +162,7 @@ func readCustom(pc sarama.PartitionConsumer, db *database.Database) {
 		if len(msg.Tags) != 0 && len(msg.Metrics) != 0 {
 			err := db.InsertCustom(msg)
 			if err != nil {
-				log.Printf("kafka consumer: could not insert custom associations: %v", err)
+				logger.Logf("kafka consumer: could not insert custom associations: %v", err)
 			}
 		}
 	}

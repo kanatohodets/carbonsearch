@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -27,6 +26,7 @@ import (
 	"github.com/kanatohodets/carbonsearch/util"
 
 	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/dgryski/carbonzipper/mstats"
 
 	"github.com/gogo/protobuf/proto"
@@ -60,6 +60,8 @@ var db *database.Database
 
 var stats *util.Stats
 
+var logger mlog.Level
+
 var virtPrefix string
 
 var timeBuckets []int64
@@ -85,7 +87,7 @@ func bucketRequestTimes(req *http.Request, t time.Duration) {
 	} else {
 		// Too big? Increment overflow bucket and log
 		atomic.AddInt64(&timeBuckets[Config.Buckets], 1)
-		log.Printf("Slow Request: %s: %s", t.String(), req.URL.String())
+		logger.Logf("Slow Request: %s: %s", t.String(), req.URL.String())
 	}
 }
 
@@ -186,7 +188,7 @@ func main() {
 	if *blockingProfile != "" {
 		f, err := os.Create(*blockingProfile)
 		if err != nil {
-			log.Fatal(err.Error())
+			logger.Fatalln(err.Error())
 		}
 		runtime.SetBlockProfileRate(1)
 		defer f.Close()
@@ -196,7 +198,7 @@ func main() {
 	if *cpuProfile != "" {
 		f, err := os.Create(*cpuProfile)
 		if err != nil {
-			log.Fatal(err)
+			logger.Fatalln(err)
 		}
 		pprof.StartCPUProfile(f)
 		defer pprof.StopCPUProfile()
@@ -220,7 +222,7 @@ func main() {
 		}
 	}
 	if Config.GraphiteHost != "" {
-		log.Println("Using graphite host", Config.GraphiteHost)
+		logger.Logln("Using graphite host", Config.GraphiteHost)
 		graphite := g2g.NewGraphite(Config.GraphiteHost, *interval, 10*time.Second)
 
 		hostname, _ := os.Hostname()
@@ -297,7 +299,7 @@ func main() {
 			time.Sleep(rotationRate)
 			err := db.MaterializeSplitIndexes()
 			if err != nil {
-				log.Printf("Error materializing indexes: %v", err)
+				logger.Logf("Error materializing indexes: %v", err)
 			}
 		}
 	}()
@@ -306,20 +308,20 @@ func main() {
 		http.HandleFunc("/metrics/find/", findHandler)
 
 		portStr := fmt.Sprintf(":%d", Config.Port)
-		log.Println("Starting carbonsearch", BuildVersion)
-		log.Printf("listening on %s\n", portStr)
-		log.Println(http.ListenAndServe(portStr, nil))
+		logger.Logln("Starting carbonsearch", BuildVersion)
+		logger.Logf("listening on %s\n", portStr)
+		logger.Logln(http.ListenAndServe(portStr, nil))
 	}()
 
 	go func() {
 		signals := make(chan os.Signal, 1)
 		signal.Notify(signals, os.Kill, os.Interrupt)
 		<-signals
-		log.Println("Shutting down...")
+		logger.Logln("Shutting down...")
 		for _, consumer := range consumers {
 			err := consumer.Stop()
 			if err != nil {
-				log.Printf("Failed to close consumer %s: %s", consumer.Name(), err)
+				logger.Logf("Failed to close consumer %s: %s", consumer.Name(), err)
 			}
 		}
 

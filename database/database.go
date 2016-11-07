@@ -2,11 +2,11 @@ package database
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dgryski/carbonzipper/mlog"
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/full"
@@ -15,6 +15,8 @@ import (
 	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
 )
+
+var logger mlog.Level
 
 //TODO(nnuss): import "github.com/dgryski/carbonzipper/mlog"
 
@@ -115,8 +117,8 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	for service, tags := range tagsByService {
 		mappedIndex, ok := db.serviceToIndex[service]
 		if !ok {
-			log.Printf("warning: there's no index for service %q. as a result, these tags will be ignored: %v", service, tags)
-			log.Println("this means that no tags have been added to the database with this service; the producer has not started yet")
+			logger.Logf("warning: there's no index for service %q. as a result, these tags will be ignored: %v", service, tags)
+			logger.Logln("this means that no tags have been added to the database with this service; the producer has not started yet")
 			continue
 		}
 		q, ok := queriesByIndex[mappedIndex]
@@ -271,7 +273,7 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 	for _, queryTag := range tags {
 		service, _, _, err := tag.Parse(queryTag)
 		if err != nil {
-			log.Println("database: tag parse error while validating service-tag pairs, skipping ", err)
+			logger.Logln("database: tag parse error while validating service-tag pairs, skipping ", err)
 			continue
 		}
 

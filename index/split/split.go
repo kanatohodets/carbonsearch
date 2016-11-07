@@ -65,16 +65,18 @@ return final intersected set
 import (
 	"container/heap"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
 )
+
+var logger mlog.Level
 
 type Join uint64
 type JoinSlice []Join
@@ -234,7 +236,7 @@ func (si *Index) Materialize() error {
 	si.IncrementGeneration()
 	g := si.Generation()
 	elapsed := time.Since(start)
-	log.Printf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
+	logger.Logf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
 
 	return nil
 }

@@ -74,8 +74,8 @@ func unionDocTest(t *testing.T, testName string, stringDocSets [2][]StringDoc, e
 		_, ok = resultSet[expectedDoc]
 		if !ok {
 			t.Errorf("%s: expected %v in the result set, but it was not there", testName, strDoc)
-			log.Printf("%s: expected %v", testName, expected)
-			log.Printf("%s: result %v", testName, result)
+			logger.Logf("%s: expected %v", testName, expected)
+			logger.Logf("%s: result %v", testName, result)
 			return
 		}
 	}
