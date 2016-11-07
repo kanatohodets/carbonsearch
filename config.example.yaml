@@ -1,5 +1,5 @@
 # where the daemon will serve queries from
-port: 8090
+port: 8070
 # the maximum number of metrics that a query can return. if a query selects more metrics, it is an error
 result_limit: 20000
 # the maximum number of tags in a single query
