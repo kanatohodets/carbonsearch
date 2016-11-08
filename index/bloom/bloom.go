@@ -15,6 +15,7 @@ const n = 3
 type Index struct {
 	bloom *bloomindex.Index
 
+	metricSet   map[index.Metric]bool
 	docToMetric map[bloomindex.DocID]index.Metric
 	mut         sync.RWMutex
 
@@ -22,9 +23,11 @@ type Index struct {
 }
 
 func NewIndex() *Index {
-	bloom := bloomindex.NewIndex(256, 65536, 10)
+	bloom := bloomindex.NewIndex(2048, 2048*512, 4)
 	return &Index{
-		bloom:       bloom,
+		bloom: bloom,
+
+		metricSet:   map[index.Metric]bool{},
 		docToMetric: map[bloomindex.DocID]index.Metric{},
 	}
 }
@@ -52,7 +55,10 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 		tokens = append(tokens, queryTrigrams...)
 	}
 
+	ti.mut.RLock()
+	defer ti.mut.RUnlock()
 	docIDs := ti.bloom.Query(tokens)
+
 	metrics, err := ti.unmapMetrics(docIDs)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -65,34 +71,37 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 	return metrics, nil
 }
 
-func (ti *Index) AddMetrics(metrics []string, hashes []index.Metric) error {
-	if len(metrics) == 0 {
+func (ti *Index) AddMetrics(rawMetrics []string, metrics []index.Metric) error {
+	if len(rawMetrics) == 0 {
 		return fmt.Errorf("%s: cannot add 0 metrics to text index", ti.Name())
 	}
 
-	docIDs := []bloomindex.DocID{}
-	for _, metric := range metrics {
-		tokens, err := tokenize(metric)
-		if err != nil {
-			return fmt.Errorf("%s AddMetrics: can't tokenize %v: %v", ti.Name(), metric, err)
+	for i, rawMetric := range rawMetrics {
+		metric := metrics[i]
+		ti.mut.RLock()
+		_, ok := ti.metricSet[metric]
+		ti.mut.RUnlock()
+		// already added this metric in the past
+		if ok {
+			continue
 		}
 
-		docID := ti.bloom.AddDocument([]uint32(tokens))
-		docIDs = append(docIDs, docID)
-	}
+		tokens, err := tokenize(rawMetric)
+		if err != nil {
+			return fmt.Errorf("%s AddMetrics: can't tokenize %v: %v", ti.Name(), rawMetric, err)
+		}
 
-	ti.mut.Lock()
-	for i, docID := range docIDs {
-		ti.docToMetric[docID] = hashes[i]
+		ti.mut.Lock()
+		ti.metricSet[metric] = true
+		docID := ti.bloom.AddDocument([]uint32(tokens))
+		ti.docToMetric[docID] = metric
+		ti.mut.Unlock()
 	}
-	ti.mut.Unlock()
 
 	return nil
 }
 
 func (ti *Index) unmapMetrics(docIDs []bloomindex.DocID) ([]index.Metric, error) {
-	ti.mut.RLock()
-	defer ti.mut.RUnlock()
 
 	metrics := make([]index.Metric, 0, len(docIDs))
 	for _, docID := range docIDs {
