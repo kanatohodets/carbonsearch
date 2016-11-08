@@ -38,10 +38,12 @@ var BuildVersion = "(development build)"
 
 // Config hold configuration variables
 var Config = struct {
-	Buckets           int               `yaml:"buckets"`
-	Port              int               `yaml:"port"`
-	QueryLimit        int               `yaml:"query_limit"`
-	ResultLimit       int               `yaml:"result_limit"`
+	Buckets     int `yaml:"buckets"`
+	Port        int `yaml:"port"`
+	IntervalSec int `yaml:"interval_sec"`
+	QueryLimit  int `yaml:"query_limit"`
+	ResultLimit int `yaml:"result_limit"`
+
 	IndexRotationRate string            `yaml:"index_rotation_rate"`
 	GraphiteHost      string            `yaml:"graphite_host"`
 	Consumers         map[string]string `yaml:"consumers"`
@@ -207,6 +209,10 @@ func main() {
 	err := util.ReadConfig(*configPath, &Config)
 	if err != nil {
 		printErrorAndExit(1, "could not read config: %s", err)
+	}
+
+	if *interval == 0 {
+		*interval = time.Duration(Config.IntervalSec) * time.Second
 	}
 
 	if len(Config.Consumers) == 0 {

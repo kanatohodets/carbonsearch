@@ -4,6 +4,10 @@ port: 8070
 result_limit: 20000
 # the maximum number of tags in a single query
 query_limit: 100
+# how long betwen graphite updates (seconds)
+interval_sec: 10
+# how many 100ms buckets to use in graphite metric: carbon.search.{host}.requests_in_0ms_to_100ms, ...
+buckets: 10
 # how often to materialize the 'read' side of the index
 # larger values mean less overall work for the system, at the cost of less
 # up-to-date query results.
