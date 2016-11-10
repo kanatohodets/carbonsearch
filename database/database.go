@@ -120,6 +120,9 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	return stringMetrics, nil
 }
 
+// if consistency becomes an issue (symptoms: metrics without mappings, or
+// queries with mysteriously lacking metrics), we can put a lock around AddMetrics
+// that globally protects indexes from writes during materialization
 func (db *Database) MaterializeIndexes() error {
 	// materialize the text index first, since it has the mapping for metric -> string
 	err := db.TextIndex.Materialize()
@@ -157,15 +160,17 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 
 	// []string => []Metric
 	metricHashes := index.HashMetrics(msg.Metrics)
-	// add metricHashes to right-side[msg.Value]
-	err := si.AddMetrics(msg.Value, metricHashes)
-	if err != nil {
-		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
-	}
-
-	err = db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
+	// add to text index, this should come before the split index adding so
+	// that we're sure the index.Metric->string mapping contains this metric
+	err := db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: could not add metrics to text index: %s", err)
+	}
+
+	// add metricHashes to right-side[msg.Value]
+	err = si.AddMetrics(msg.Value, metricHashes)
+	if err != nil {
+		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
 	}
 
 	db.stats.MetricsIndexed.Add(int64(len(metricHashes)))
@@ -214,14 +219,17 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 	db.stats.CustomMessages.Add(1)
 
 	metricHashes := index.HashMetrics(msg.Metrics)
-	err := db.FullIndex.Add(tags, metricHashes)
-	if err != nil {
-		return fmt.Errorf("database: error while adding to custom index: %s", err)
-	}
 
-	err = db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
+	// add to text index, this should come before the full index adding so
+	// that we're sure the index.Metric->string mapping contains this metric
+	err := db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: could not add metrics to text index: %s", err)
+	}
+
+	err = db.FullIndex.Add(tags, metricHashes)
+	if err != nil {
+		return fmt.Errorf("database: error while adding to custom index: %s", err)
 	}
 
 	db.stats.FullIndexTags.Set(int64(db.FullIndex.TagSize()))
