@@ -55,6 +55,67 @@ func (ti *Index) Name() string {
 	return "bloom text index"
 }
 
+// Filter filters a set of string metrics using a set of text tags
+// (text-match:foobar). Returns the string metrics which match all of the given
+// text tags.
+func (ti *Index) Filter(textTags, metrics []string) []string {
+	matches := []string{}
+	intersectionCounts := make([]int, len(metrics))
+	for _, tag := range textTags {
+		search := strings.TrimPrefix(tag, "text-match:")
+		// broken pin -> no possible matches -> empty intersection
+		if search[0] == '$' || search[len(search)-1] == '^' {
+			return []string{}
+		}
+		caret := search[0] == '^'
+		dollar := search[len(search)-1] == '$'
+		nonpositional := strings.Trim(search, "^$")
+
+		// thinking about it: this case is impossible because you can't have
+		// dots in your query. besides, if you already know the exact metric,
+		// just query graphite for that metric!
+		if caret && dollar {
+			for i, rawMetric := range metrics {
+				if rawMetric == nonpositional {
+					intersectionCounts[i]++
+					if intersectionCounts[i] == len(textTags) {
+						matches = append(matches, rawMetric)
+					}
+				}
+			}
+		} else if caret {
+			for i, rawMetric := range metrics {
+				if strings.HasPrefix(rawMetric, nonpositional) {
+					intersectionCounts[i]++
+					if intersectionCounts[i] == len(textTags) {
+						matches = append(matches, rawMetric)
+					}
+				}
+			}
+		} else if dollar {
+			for i, rawMetric := range metrics {
+				if strings.HasSuffix(rawMetric, nonpositional) {
+					intersectionCounts[i]++
+					if intersectionCounts[i] == len(textTags) {
+						matches = append(matches, rawMetric)
+					}
+				}
+			}
+		} else {
+			for i, rawMetric := range metrics {
+				if strings.Contains(rawMetric, nonpositional) {
+					intersectionCounts[i]++
+					if intersectionCounts[i] == len(textTags) {
+						matches = append(matches, rawMetric)
+					}
+				}
+			}
+		}
+	}
+
+	return matches
+}
+
 func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 	searches := []string{}
 	for _, tag := range q.Raw {

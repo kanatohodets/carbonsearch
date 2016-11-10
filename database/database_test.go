@@ -193,18 +193,24 @@ func queryTest(t *testing.T, db *Database, testName string, query string, expect
 		}
 	}
 
-	// ensure results are sorted. breaking this is a symptom that some of the
-	// sets are stored unsorted at some point, which breaks a boatload of
-	// assumptions
-	expectedHashes := index.HashMetrics(expectedMetrics)
-	index.SortMetrics(expectedHashes)
+	// we don't do this for text queries because they're filtered at the string
+	// level, so sortedness is no longer a viable (or important) property to
+	// maintain
+	if len(parsedQuery["text"]) == 0 {
+		// ensure results are sorted. breaking this is a symptom that some of the
+		// sets are stored unsorted at some point, which breaks a boatload of
+		// assumptions
+		expectedHashes := index.HashMetrics(expectedMetrics)
+		index.SortMetrics(expectedHashes)
 
-	resultHashes := index.HashMetrics(result)
-	if fmt.Sprintf("%v", expectedHashes) != fmt.Sprintf("%v", resultHashes) {
-		t.Errorf("%v: expected and result metrics are the same, but in a different order!", testName)
-		logger.Logf("%v expected: %q", testName, expectedMetrics)
-		logger.Logf("%v result: %q", testName, result)
-		return
+		resultHashes := index.HashMetrics(result)
+		if fmt.Sprintf("%v", expectedHashes) != fmt.Sprintf("%v", resultHashes) {
+			t.Errorf("%v: expected and result metrics are the same, but in a different order!", testName)
+			logger.Logf("%v expected: %q, %q", testName, expectedMetrics, expectedHashes)
+			logger.Logf("%v result: %q, %q", testName, result, resultHashes)
+
+			return
+		}
 	}
 }
 
@@ -289,6 +295,67 @@ func TestSplitQuery(t *testing.T) {
 	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes
 }
 
+func TestTextQuery(t *testing.T) {
+	var unusedSplitIndexes = map[string]string{
+		"foobar_unused_key": "foobar_unused_service",
+	}
+
+	db := New(queryLimit, resultLimit, fullService, textService, unusedSplitIndexes, stats)
+
+	err := db.InsertMetrics(&m.KeyMetric{
+		Key:   "foobar_unused_key",
+		Value: "foobar_unused_value",
+		Metrics: []string{
+			"foo",
+			"bar",
+			"baz",
+			"blorgfoo",
+			"mug_foo_ugh",
+			// if user query ngram order isn't respected, a search like "cron$"
+			// will return this document, since 'cro', 'ron', and 'on$' are all in
+			// this doc, just not sequential.
+			"ron.crocodile.option",
+			"rose_daffodil_cron",
+			"popbaz",
+			"bazpop",
+		}})
+
+	if err != nil {
+		t.Errorf("Text Query: problem inserting metrics: %v", err)
+		return
+	}
+
+	err = db.MaterializeIndexes()
+	if err != nil {
+		t.Errorf("materialize returned an error: %v", err)
+		return
+	}
+
+	searchTest(t, db, "zero results", []string{"qux"}, []string{})
+	searchTest(t, db, "simple", []string{"foo"}, []string{"foo", "blorgfoo", "mug_foo_ugh"})
+	searchTest(t, db, "start pinned", []string{"^foo"}, []string{"foo"})
+	searchTest(t, db, "end pinned", []string{"foo$"}, []string{"foo", "blorgfoo"})
+	searchTest(t, db, "start/end pinned", []string{"^foo$"}, []string{"foo"})
+	searchTest(t, db, "partial match but zero result", []string{"^ugh"}, []string{})
+	searchTest(t, db, "respect user trigram positions", []string{"cron$"}, []string{"rose_daffodil_cron"})
+	searchTest(t, db, "full long metric name", []string{"rose_daffodil_cron"}, []string{"rose_daffodil_cron"})
+	searchTest(t, db, "full long metric name pinned", []string{"^rose_daffodil_cron$"}, []string{"rose_daffodil_cron"})
+	searchTest(t, db, "full long metric name, but broken pins", []string{"$rose_daffodil_cron^"}, []string{})
+
+	searchTest(t, db, "text filter intersects, not unions", []string{"^pop", "baz"}, []string{"popbaz"})
+}
+
+func searchTest(t *testing.T, db *Database, testName string, searches, expected []string) {
+	queryString := "text-match:" + searches[0]
+	for i, search := range searches {
+		if i == 0 {
+			continue
+		}
+		queryString = queryString + ".text-match:" + search
+	}
+	queryTest(t, db, fmt.Sprintf("text test: %v", testName), queryString, expected)
+}
+
 func splitIndexQueryTests(t *testing.T, db *Database, prefix string) {
 	queryTest(t, db, fmt.Sprintf("%v single tag query, one split index", prefix),
 		"servers-dc:us_west",
@@ -321,7 +388,6 @@ func splitIndexQueryTests(t *testing.T, db *Database, prefix string) {
 			"monitors.was_the_site_up",
 		},
 	)
-
 }
 
 func TestTooVagueQuery(t *testing.T) {

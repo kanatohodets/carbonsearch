@@ -108,6 +108,11 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		return nil, err
 	}
 
+	textQueries, ok := tagsByService["text"]
+	if ok {
+		stringMetrics = db.TextIndex.Filter(textQueries, stringMetrics)
+	}
+
 	if len(stringMetrics) > db.resultLimit {
 		return nil, fmt.Errorf("database: query selected %d metrics, which is over the limit of %d results in a single query", len(stringMetrics), db.resultLimit)
 	}
