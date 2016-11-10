@@ -320,6 +320,10 @@ func New(
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-readable", si.Name()), util.ExpInt(si.ReadableJoins()))
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-written", si.Name()), util.ExpInt(si.WrittenJoins()))
 			}
+
+			db.stats.TextIndex.Set("generation", util.ExpInt(db.TextIndex.Generation()))
+			db.stats.TextIndex.Set("metrics-readable", util.ExpInt(db.TextIndex.ReadableMetrics()))
+			db.stats.TextIndex.Set("metrics-written", util.ExpInt(db.TextIndex.WrittenMetrics()))
 		}
 	}()
 	return db
