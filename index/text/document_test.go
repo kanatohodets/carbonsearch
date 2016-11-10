@@ -2,12 +2,15 @@ package text
 
 import (
 	"fmt"
-	"log"
 	"testing"
 
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/util/test"
+
+	"github.com/dgryski/carbonzipper/mlog"
 )
+
+var logger mlog.Level
 
 type StringDoc struct {
 	metric string
