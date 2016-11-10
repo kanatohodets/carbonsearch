@@ -20,6 +20,8 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
+	ti.Materialize()
+
 	q := index.NewQuery([]string{
 		"text-match:nginx",
 	})

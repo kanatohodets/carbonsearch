@@ -101,7 +101,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 
 	metrics := index.IntersectMetrics(metricSets)
 
-	stringMetrics, err := db.unmapMetrics(metrics)
+	stringMetrics, err := db.TextIndex.UnmapMetrics(metrics)
 	// TODO(btyler): try to figure out how to annotate this error with better
 	// information, since just seeing a random int64 will not be very handy
 	if err != nil {
@@ -115,7 +115,13 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	return stringMetrics, nil
 }
 
-func (db *Database) MaterializeSplitIndexes() error {
+func (db *Database) MaterializeIndexes() error {
+	// materialize the text index first, since it has the mapping for metric -> string
+	err := db.TextIndex.Materialize()
+	if err != nil {
+		return fmt.Errorf("database: error while materializing text index %v: %v", db.TextIndex.Name(), err)
+	}
+
 	for _, index := range db.splitIndexes {
 		err := index.Materialize()
 		if err != nil {
@@ -145,7 +151,7 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	db.stats.MetricMessages.Add(1)
 
 	// []string => []Metric
-	metricHashes := db.mapMetrics(msg.Metrics)
+	metricHashes := index.HashMetrics(msg.Metrics)
 	// add metricHashes to right-side[msg.Value]
 	err := si.AddMetrics(msg.Value, metricHashes)
 	if err != nil {
@@ -202,7 +208,7 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 
 	db.stats.CustomMessages.Add(1)
 
-	metricHashes := db.mapMetrics(msg.Metrics)
+	metricHashes := index.HashMetrics(msg.Metrics)
 	err := db.FullIndex.Add(tags, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: error while adding to custom index: %s", err)
@@ -242,40 +248,6 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 	}
 
 	return valid
-}
-
-// mapMetrics converts string metrics to typed []uint64
-func (db *Database) mapMetrics(metrics []string) []index.Metric {
-	db.metricsMutex.Lock()
-	defer db.metricsMutex.Unlock()
-
-	hashed := make([]index.Metric, len(metrics))
-
-	for i, metric := range metrics {
-		hash := index.HashMetric(metric)
-		db.metrics[hash] = metric
-		hashed[i] = hash
-	}
-
-	return hashed
-}
-
-// unmapMetrics converts typed []uint64 metrics to string
-func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
-	db.metricsMutex.RLock()
-	defer db.metricsMutex.RUnlock()
-
-	stringMetrics := make([]string, len(metrics))
-
-	for i, metric := range metrics {
-		str, ok := db.metrics[metric]
-		if !ok {
-			return nil, fmt.Errorf("database: the hashed metric '%d' has no mapping back to a string! this is awful", metric)
-		}
-		stringMetrics[i] = str
-	}
-
-	return stringMetrics, nil
 }
 
 // New initializes a new Database

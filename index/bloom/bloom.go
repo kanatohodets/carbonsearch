@@ -2,8 +2,11 @@ package bloom
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/kanatohodets/carbonsearch/index"
 
@@ -13,23 +16,39 @@ import (
 const n = 3
 
 type Index struct {
-	bloom *bloomindex.Index
+	bloom       atomic.Value //*bloomindex.Index
+	docToMetric atomic.Value //map[bloomindex.DocID]index.Metric
+	metricMap   atomic.Value //map[index.Metric]string
 
-	metricSet   map[index.Metric]bool
-	docToMetric map[bloomindex.DocID]index.Metric
-	mut         sync.RWMutex
+	mut              sync.RWMutex
+	mutableMetrics   map[index.Metric][]uint32
+	mutableMetricMap map[index.Metric]string
 
-	count int
+	numHashes int
+	blockSize int
+	metaSize  int
+
+	// reporting
+	readableMetrics uint32
+	writtenMetrics  uint32
+	generation      uint64
 }
 
 func NewIndex() *Index {
-	bloom := bloomindex.NewIndex(2048, 2048*512, 4)
-	return &Index{
-		bloom: bloom,
+	ti := Index{
+		mutableMetrics:   map[index.Metric][]uint32{},
+		mutableMetricMap: map[index.Metric]string{},
 
-		metricSet:   map[index.Metric]bool{},
-		docToMetric: map[bloomindex.DocID]index.Metric{},
+		//TODO(btyler): configurable?
+		numHashes: 4,
+		blockSize: 2048,
+		metaSize:  512 * 2048,
 	}
+
+	ti.bloom.Store(bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes))
+	ti.docToMetric.Store(map[bloomindex.DocID]index.Metric{})
+	ti.metricMap.Store(map[index.Metric]string{})
+	return &ti
 }
 
 func (ti *Index) Name() string {
@@ -45,21 +64,24 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 		}
 	}
 
-	tokens := []uint32{}
-	for _, query := range searches {
-		queryTrigrams, err := tokenize(query)
-		if err != nil {
-			return nil, fmt.Errorf("%v Query: error tokenizing %v: %v", ti.Name(), query, err)
-		}
-
-		tokens = append(tokens, queryTrigrams...)
+	if len(searches) == 0 {
+		return nil, fmt.Errorf("%v Query: no text searches in query: %v", ti.Name(), q.Raw)
 	}
 
-	ti.mut.RLock()
-	defer ti.mut.RUnlock()
-	docIDs := ti.bloom.Query(tokens)
+	tokens := []uint32{}
+	for _, search := range searches {
+		nonpositional := strings.Trim(search, "^$")
+		searchTrigrams, err := tokenize(nonpositional)
+		if err != nil {
+			return nil, fmt.Errorf("%v Query: error tokenizing %v: %v", ti.Name(), search, err)
+		}
 
-	metrics, err := ti.unmapMetrics(docIDs)
+		tokens = append(tokens, searchTrigrams...)
+	}
+
+	docIDs := ti.BloomIndex().Query(tokens)
+
+	metrics, err := ti.docsToMetrics(docIDs)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%v Query: error unmapping doc IDs: %v",
@@ -78,37 +100,90 @@ func (ti *Index) AddMetrics(rawMetrics []string, metrics []index.Metric) error {
 
 	for i, rawMetric := range rawMetrics {
 		metric := metrics[i]
-		ti.mut.RLock()
-		_, ok := ti.metricSet[metric]
-		ti.mut.RUnlock()
-		// already added this metric in the past
-		if ok {
-			continue
-		}
-
 		tokens, err := tokenize(rawMetric)
 		if err != nil {
 			return fmt.Errorf("%s AddMetrics: can't tokenize %v: %v", ti.Name(), rawMetric, err)
 		}
 
 		ti.mut.Lock()
-		ti.metricSet[metric] = true
-		docID := ti.bloom.AddDocument([]uint32(tokens))
-		ti.docToMetric[docID] = metric
+		ti.mutableMetrics[metric] = tokens
+		ti.mutableMetricMap[metric] = rawMetric
 		ti.mut.Unlock()
 	}
 
+	writtenMetrics := ti.WrittenMetrics()
+	ti.SetWrittenMetrics(writtenMetrics + uint32(len(rawMetrics)))
 	return nil
 }
 
-func (ti *Index) unmapMetrics(docIDs []bloomindex.DocID) ([]index.Metric, error) {
+func (ti *Index) Materialize() error {
+	start := time.Now()
 
+	newBloom := bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes)
+	docToMetric := map[bloomindex.DocID]index.Metric{}
+	newMetricMap := map[index.Metric]string{}
+
+	// NOTE(btyler): grouping these into the same lock means we hang on to the
+	// lock a bit longer, but for consistency I think it's best to always have
+	// the same contents in the two
+	ti.mut.RLock()
+	for metric, tokens := range ti.mutableMetrics {
+		docID := newBloom.AddDocument(tokens)
+		docToMetric[docID] = metric
+	}
+	for metric, rawMetric := range ti.mutableMetricMap {
+		newMetricMap[metric] = rawMetric
+	}
+	ti.mut.RUnlock()
+
+	ti.bloom.Store(newBloom)
+	ti.docToMetric.Store(docToMetric)
+	ti.metricMap.Store(newMetricMap)
+
+	// update stats
+	ti.SetReadableMetrics(uint32(len(docToMetric)))
+	ti.IncrementGeneration()
+	g := ti.Generation()
+	elapsed := time.Since(start)
+
+	log.Printf("text index %s: New generation %v took %v to generate", ti.Name(), g, elapsed)
+	return nil
+}
+
+// UnmapMetrics converts typed []uint64 metrics to string
+func (ti *Index) UnmapMetrics(metrics []index.Metric) ([]string, error) {
+	metricMap := ti.MetricMap()
+	rawMetrics := make([]string, 0, len(metrics))
+
+	for _, metric := range metrics {
+		raw, ok := metricMap[metric]
+		if !ok {
+			return nil, fmt.Errorf("text index: the hashed metric '%d' has no mapping back to a string! this is awful", metric)
+		}
+		rawMetrics = append(rawMetrics, raw)
+	}
+
+	return rawMetrics, nil
+}
+
+func (ti *Index) BloomIndex() *bloomindex.Index {
+	return ti.bloom.Load().(*bloomindex.Index)
+}
+func (ti *Index) DocumentMap() map[bloomindex.DocID]index.Metric {
+	return ti.docToMetric.Load().(map[bloomindex.DocID]index.Metric)
+}
+func (ti *Index) MetricMap() map[index.Metric]string {
+	return ti.metricMap.Load().(map[index.Metric]string)
+}
+
+func (ti *Index) docsToMetrics(docIDs []bloomindex.DocID) ([]index.Metric, error) {
 	metrics := make([]index.Metric, 0, len(docIDs))
+	docMap := ti.DocumentMap()
 	for _, docID := range docIDs {
-		metric, ok := ti.docToMetric[docID]
+		metric, ok := docMap[docID]
 		if !ok {
 			return nil, fmt.Errorf(
-				"unmapMetrics: docID %q was missing in the docToMetric map! this is awful!",
+				"docsToMetrics: docID %q was missing in the docToMetric map! this is awful!",
 				docID,
 			)
 		}

@@ -51,6 +51,12 @@ func TestFullQuery(t *testing.T) {
 		}
 	}
 
+	err := db.MaterializeIndexes()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
 	// standard query
 	query := map[string][]string{
 		"custom": {"custom-dislikedByUser:jane"},
@@ -148,7 +154,7 @@ func populateSplitIndex(t *testing.T, db *Database, testName, joinKey string, da
 		}
 	}
 
-	err := db.MaterializeSplitIndexes()
+	err := db.MaterializeIndexes()
 	if err != nil {
 		t.Errorf("%v problem materializing indexes: %v", testName, err)
 		return
@@ -340,6 +346,12 @@ func TestTooVagueQuery(t *testing.T) {
 	// standard query
 	query := map[string][]string{
 		"custom": {"custom-favorites:tester"},
+	}
+
+	err := db.MaterializeIndexes()
+	if err != nil {
+		t.Error(err)
+		return
 	}
 
 	results, err := db.Query(query)
