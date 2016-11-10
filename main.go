@@ -247,7 +247,7 @@ func main() {
 		// +1 to track every over the number of buckets we track
 		timeBuckets = make([]int64, Config.Buckets+1)
 
-		for i := 0; i <= Config.Buckets; i++ {
+		for i := 0; i < Config.Buckets; i++ {
 			graphite.Register(fmt.Sprintf("carbon.search.%s.requests_in_%dms_to_%dms", hostname, i*100, (i+1)*100), bucketEntry(i))
 		}
 		graphite.Register(fmt.Sprintf("carbon.search.%s.requests_in_%dms_to_infinity", hostname, Config.Buckets*100), bucketEntry(Config.Buckets))
