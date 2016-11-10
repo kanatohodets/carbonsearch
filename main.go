@@ -47,6 +47,10 @@ var Config = struct {
 	IndexRotationRate string            `yaml:"index_rotation_rate"`
 	GraphiteHost      string            `yaml:"graphite_host"`
 	Consumers         map[string]string `yaml:"consumers"`
+
+	FullIndexService string            `yaml:"full_index_service"`
+	TextIndexService string            `yaml:"text_index_service"`
+	SplitIndexes     map[string]string `yaml:"split_indexes"`
 }{
 	Port: 8070,
 
@@ -215,6 +219,26 @@ func main() {
 		*interval = time.Duration(Config.IntervalSec) * time.Second
 	}
 
+	strikes := 0
+	if len(Config.SplitIndexes) == 0 {
+		strikes++
+		logger.Logln("warning: config doesn't have any split indexes defined")
+	}
+
+	if len(Config.FullIndexService) == 0 {
+		strikes++
+		logger.Logln("warning: full index service is empty. disabling direct tag<->index associations.")
+	}
+
+	if len(Config.TextIndexService) == 0 {
+		strikes++
+		logger.Logln("warning: text index service is empty. disabling text index.")
+	}
+
+	if strikes == 3 {
+		printErrorAndExit(1, "config doesn't have any valid indexes. Please double check the config file (%q).", *configPath)
+	}
+
 	if len(Config.Consumers) == 0 {
 		printErrorAndExit(1, "config doesn't have any consumers. carbonsearch won't have anything to search on. Take a peek in %q, see if it looks like it should", *configPath)
 	}
@@ -262,7 +286,14 @@ func main() {
 	}
 
 	wg := &sync.WaitGroup{}
-	db = database.New(Config.QueryLimit, Config.ResultLimit, stats)
+	db = database.New(
+		Config.QueryLimit,
+		Config.ResultLimit,
+		Config.FullIndexService,
+		Config.TextIndexService,
+		Config.SplitIndexes,
+		stats,
+	)
 	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){

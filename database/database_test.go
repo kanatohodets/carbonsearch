@@ -17,10 +17,16 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+var queryLimit = 10
+var resultLimit = 10
+var fullService = "custom"
+var textService = "text"
+var splitIndexes = map[string]string{
+	"fqdn": "servers",
+}
+
 func TestFullQuery(t *testing.T) {
-	queryLimit := 10
-	resultLimit := 10
-	db := New(queryLimit, resultLimit, stats)
+	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
 
 	batches := []*m.TagMetric{
 		{
@@ -197,9 +203,7 @@ func queryTest(t *testing.T, db *Database, testName string, query string, expect
 }
 
 func TestSplitQuery(t *testing.T) {
-	queryLimit := 10
-	resultLimit := 10
-	db := New(queryLimit, resultLimit, stats)
+	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
 
 	populateSplitIndex(t, db, "basic split queries",
 		"fqdn",
@@ -315,9 +319,8 @@ func splitIndexQueryTests(t *testing.T, db *Database, prefix string) {
 }
 
 func TestTooVagueQuery(t *testing.T) {
-	queryLimit := 10
-	resultLimit := 1
-	db := New(queryLimit, resultLimit, stats)
+	smallResultLimit := 1
+	db := New(queryLimit, smallResultLimit, fullService, textService, splitIndexes, stats)
 
 	batches := []*m.TagMetric{
 		{
@@ -360,7 +363,7 @@ func TestInsertTags(t *testing.T) {
 }
 
 func TestParseQuery(t *testing.T) {
-	db := New(10, 10, stats)
+	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
 
 	parseTagsTestCase(t, db, "basic",
 		"server-state:live",
@@ -393,8 +396,8 @@ func TestParseQuery(t *testing.T) {
 	)
 
 	// check query size limit
-	queryLimit := 1
-	db = New(queryLimit, 10, stats)
+	smallQueryLimit := 1
+	db = New(smallQueryLimit, resultLimit, fullService, textService, splitIndexes, stats)
 	_, err := db.ParseQuery("servers-state:live.servers-dc:us_east")
 	if err == nil {
 		t.Errorf("oversize query failed to throw error")
@@ -403,7 +406,7 @@ func TestParseQuery(t *testing.T) {
 
 	expectedErr := fmt.Sprintf(
 		"database ParseQuery: max query size is %v, but this query has %v tags. try again with a smaller query",
-		queryLimit,
+		smallQueryLimit,
 		2,
 	)
 

@@ -12,6 +12,18 @@ buckets: 10
 # larger values mean less overall work for the system, at the cost of less
 # up-to-date query results.
 index_rotation_rate: "10s"
+# how to query direct tag<->metric associations (e.g. the 'custom' in 'custom-favorites:btyler')
+full_index_service: "custom"
+# how to query the text index (e.g. the 'text' in 'text-match:foobar')
+text_index_service: "text"
+# mapping of join key -> query prefix for split indexes. for example: the
+# 'servers' data source in 'servers-dc:us_east' associates tags with metrics
+# through the 'fqdn' join key. you can have multiple data sources that
+# associate using the same join key, but each data source can use only one join
+# key.
+split_indexes:
+    fqdn: "servers"
+
 # adding a line to 'consumers' implies that carbonsearch should use this consumer.
 # the value should be the absolute path to the config file for that consumer type
 consumers:

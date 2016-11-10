@@ -22,64 +22,23 @@ var logger mlog.Level
 
 // Database abstracts over contained indexes
 type Database struct {
-	stats             *util.Stats
-	serviceToIndex    map[string]index.Index
-	serviceIndexMutex sync.RWMutex
+	stats *util.Stats
+	// not protected by a lock: it's read only once the database is created
+	serviceToIndex map[string]index.Index
 
 	queryLimit  int
 	resultLimit int
 
+	// not protected by a lock: it's read only once the database is created
 	splitIndexes map[string]*split.Index
-	splitMutex   sync.RWMutex
 
 	metrics      map[index.Metric]string
 	metricsMutex sync.RWMutex
 
+	fullIndexService string
+
 	FullIndex *full.Index
 	TextIndex *text.Index
-}
-
-// GetOrCreateSplitIndex returns a *split.Index for `join`, chosing an existing one if possible
-func (db *Database) GetOrCreateSplitIndex(join string) (*split.Index, error) {
-	index := db.GetSplitIndex(join)
-	if index == nil {
-		var err error
-		index, err = db.CreateSplitIndex(join)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return index, nil
-
-}
-
-// CreateSplitIndex creates a new split.Index and adds to the `db`
-func (db *Database) CreateSplitIndex(join string) (*split.Index, error) {
-	db.splitMutex.Lock()
-	defer db.splitMutex.Unlock()
-
-	_, ok := db.splitIndexes[join]
-	if ok {
-		return nil, fmt.Errorf("database: index for key %s already exists", join)
-	}
-
-	index := split.NewIndex(join)
-	db.splitIndexes[join] = index
-
-	return index, nil
-}
-
-// GetSplitIndex returns the *split.Index for `join` in the db if one exists
-func (db *Database) GetSplitIndex(join string) *split.Index {
-	db.splitMutex.RLock()
-	defer db.splitMutex.RUnlock()
-
-	index, ok := db.splitIndexes[join]
-	if !ok {
-		return nil
-	}
-
-	return index
 }
 
 /*
@@ -113,7 +72,6 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	queriesByIndex := map[index.Index]*index.Query{}
 
 	// translate from text queries to index.Query and from text services to index.Index
-	db.serviceIndexMutex.RLock()
 	for service, tags := range tagsByService {
 		mappedIndex, ok := db.serviceToIndex[service]
 		if !ok {
@@ -128,7 +86,6 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 			queriesByIndex[mappedIndex] = index.NewQuery(tags)
 		}
 	}
-	db.serviceIndexMutex.RUnlock()
 
 	// query indexes, take intersection of metrics
 	// NOTE(nnuss): the first dimension of metricSets is len(queriesByIndex)
@@ -159,14 +116,12 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 }
 
 func (db *Database) MaterializeSplitIndexes() error {
-	db.splitMutex.RLock()
 	for _, index := range db.splitIndexes {
 		err := index.Materialize()
 		if err != nil {
 			return fmt.Errorf("database: error while materializing split index %v: %v", index.Name(), err)
 		}
 	}
-	db.splitMutex.RUnlock()
 	return nil
 }
 
@@ -182,9 +137,9 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	}
 
 	// only happens in the write-side
-	si, err := db.GetOrCreateSplitIndex(msg.Key)
-	if err != nil {
-		return fmt.Errorf("database: could not/get create index for %s: %s", msg.Key, err)
+	si, ok := db.splitIndexes[msg.Key]
+	if !ok {
+		return fmt.Errorf("database InsertMetrics: no split index for join key %q", msg.Key)
 	}
 
 	db.stats.MetricMessages.Add(1)
@@ -192,7 +147,7 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	// []string => []Metric
 	metricHashes := db.mapMetrics(msg.Metrics)
 	// add metricHashes to right-side[msg.Value]
-	err = si.AddMetrics(msg.Value, metricHashes)
+	err := si.AddMetrics(msg.Value, metricHashes)
 	if err != nil {
 		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
 	}
@@ -216,16 +171,16 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 		return fmt.Errorf("database: tag batch must have at least one tag")
 	}
 
-	si, err := db.GetOrCreateSplitIndex(msg.Key)
-	if err != nil {
-		return fmt.Errorf("database: could not get/create index for %q: %s", msg.Key, err)
+	si, ok := db.splitIndexes[msg.Key]
+	if !ok {
+		return fmt.Errorf("database InsertTags: no split index for join key %q", msg.Key)
 	}
 
 	db.stats.TagMessages.Add(1)
 
-	tags := db.validateServiceIndexPairs(msg.Tags, si)
+	tags := db.validateServiceIndexPairs(msg.Tags, si, msg.Key)
 
-	err = si.AddTags(msg.Value, tags)
+	err := si.AddTags(msg.Value, tags)
 	if err != nil {
 		return fmt.Errorf("database: could not add tags to tag side of index %q: %s", msg.Key, err)
 	}
@@ -243,7 +198,7 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 		return fmt.Errorf("database: custom batch must have at least one tag")
 	}
 
-	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, db.FullIndex))
+	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, db.FullIndex, db.fullIndexService))
 
 	db.stats.CustomMessages.Add(1)
 
@@ -264,11 +219,9 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 	return nil
 }
 
-// ensure that tags are only added to one index -- the one that owns the tag's
-// service, where 'server-state:live' has a service 'server'.
 // NOTE(btyler): we're being permissive here and only skipping adding tags with
 // a bad service for this index. this contrasts with discarding the entire update.
-func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.Index) []string {
+func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.Index, indexName string) []string {
 	valid := []string{}
 	for _, queryTag := range tags {
 		service, _, _, err := tag.Parse(queryTag)
@@ -277,23 +230,14 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 			continue
 		}
 
-		db.serviceIndexMutex.RLock()
 		mappedIndex, ok := db.serviceToIndex[service]
 		if ok {
 			if mappedIndex == givenIndex {
 				valid = append(valid, queryTag)
 			}
-			db.serviceIndexMutex.RUnlock()
 		} else {
-			db.serviceIndexMutex.RUnlock()
-			// first seen -> correct till end of time. this assumption may not scale.
-			db.serviceIndexMutex.Lock()
-			db.serviceToIndex[service] = givenIndex
-			db.serviceIndexMutex.Unlock()
-
-			valid = append(valid, queryTag)
-
-			db.stats.ServicesByIndex.Set(service, util.ExpString(givenIndex.Name()))
+			logger.Logf("database: service %q has no mapped index, but something is writing to carbonsearch expecting it to be associated with the %q index. if this assocation is intended, add it to config.yaml", service, indexName)
+			continue
 		}
 	}
 
@@ -335,18 +279,31 @@ func (db *Database) unmapMetrics(metrics []index.Metric) ([]string, error) {
 }
 
 // New initializes a new Database
-func New(queryLimit, resultLimit int, stats *util.Stats) *Database {
+func New(
+	queryLimit, resultLimit int,
+	fullIndexService, textIndexService string,
+	splitIndexConfig map[string]string,
+	stats *util.Stats,
+) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
-	// TODO(nnuss): These string literal mappings should one of:
-	// A. moved to constants
-	// B. made configuration
-	// C. made trivial consumers
 	fullIndex := full.NewIndex()
-	serviceToIndex["custom"] = fullIndex
+	if fullIndexService != "" {
+		serviceToIndex[fullIndexService] = fullIndex
+	}
 
 	textIndex := text.NewIndex()
-	serviceToIndex["text"] = textIndex
+	if textIndexService != "" {
+		serviceToIndex[textIndexService] = textIndex
+	}
+
+	splitIndexes := map[string]*split.Index{}
+	for joinKey, service := range splitIndexConfig {
+		index := split.NewIndex(joinKey)
+		splitIndexes[joinKey] = index
+		serviceToIndex[service] = index
+	}
+
 	db := &Database{
 		stats:          stats,
 		serviceToIndex: serviceToIndex,
@@ -354,9 +311,11 @@ func New(queryLimit, resultLimit int, stats *util.Stats) *Database {
 		queryLimit:  queryLimit,
 		resultLimit: resultLimit,
 
-		splitIndexes: make(map[string]*split.Index),
+		splitIndexes: splitIndexes,
 
 		metrics: make(map[index.Metric]string),
+
+		fullIndexService: fullIndexService,
 
 		FullIndex: fullIndex,
 		TextIndex: textIndex,
@@ -365,7 +324,6 @@ func New(queryLimit, resultLimit int, stats *util.Stats) *Database {
 		for {
 			time.Sleep(5 * time.Second)
 			db.stats.Uptime.Add(5)
-			db.splitMutex.RLock()
 			for _, si := range db.splitIndexes {
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-generation", si.Name()), util.ExpInt(si.Generation()))
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics-readable", si.Name()), util.ExpInt(si.ReadableMetrics()))
@@ -377,7 +335,6 @@ func New(queryLimit, resultLimit int, stats *util.Stats) *Database {
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-readable", si.Name()), util.ExpInt(si.ReadableJoins()))
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-written", si.Name()), util.ExpInt(si.WrittenJoins()))
 			}
-			db.splitMutex.RUnlock()
 		}
 	}()
 	return db
