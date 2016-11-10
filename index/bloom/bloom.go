@@ -13,7 +13,7 @@ import (
 	"github.com/dgryski/go-bloomindex"
 )
 
-const n = 3
+const n = 4
 
 type Index struct {
 	bloom       atomic.Value //*bloomindex.Index
@@ -259,15 +259,19 @@ func tokenize(term string) ([]uint32, error) {
 		return nil, fmt.Errorf("%s is too short to search on", term)
 	}
 
-	// len(term) - 1 for quadgrams
-	tokens := make([]uint32, 0, len(term)-1)
+	// len(term) - 3 for quadgrams
+	tokens := make([]uint32, 0, len(term)-3)
 	for i := 0; i <= len(term)-n; i++ {
-		tokens = append(tokens, trigramize([3]byte{term[i], term[i+1], term[i+2]}))
+		var chunk [n]byte
+		for j := 0; j < len(chunk); j++ {
+			chunk[j] = term[i+j]
+		}
+		tokens = append(tokens, ngramize(chunk))
 	}
 
 	return tokens, nil
 }
 
-func trigramize(s [3]byte) uint32 {
-	return uint32(s[0])<<16 | uint32(s[1])<<8 | uint32(s[2])
+func ngramize(s [n]byte) uint32 {
+	return uint32(s[0])<<16 | uint32(s[1])<<8 | uint32(s[2])<<4 | uint32(s[3])
 }

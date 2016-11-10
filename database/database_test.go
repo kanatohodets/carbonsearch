@@ -306,18 +306,18 @@ func TestTextQuery(t *testing.T) {
 		Key:   "foobar_unused_key",
 		Value: "foobar_unused_value",
 		Metrics: []string{
-			"foo",
-			"bar",
-			"baz",
-			"blorgfoo",
-			"mug_foo_ugh",
+			"foox",
+			"bart",
+			"bazz",
+			"blorgfoox",
+			"mug_foox_ugh",
 			// if user query ngram order isn't respected, a search like "cron$"
 			// will return this document, since 'cro', 'ron', and 'on$' are all in
 			// this doc, just not sequential.
 			"ron.crocodile.option",
 			"rose_daffodil_cron",
-			"popbaz",
-			"bazpop",
+			"kpopbazz",
+			"bazzkpop",
 		}})
 
 	if err != nil {
@@ -331,18 +331,18 @@ func TestTextQuery(t *testing.T) {
 		return
 	}
 
-	searchTest(t, db, "zero results", []string{"qux"}, []string{})
-	searchTest(t, db, "simple", []string{"foo"}, []string{"foo", "blorgfoo", "mug_foo_ugh"})
-	searchTest(t, db, "start pinned", []string{"^foo"}, []string{"foo"})
-	searchTest(t, db, "end pinned", []string{"foo$"}, []string{"foo", "blorgfoo"})
-	searchTest(t, db, "start/end pinned", []string{"^foo$"}, []string{"foo"})
-	searchTest(t, db, "partial match but zero result", []string{"^ugh"}, []string{})
+	searchTest(t, db, "zero results", []string{"quxx"}, []string{})
+	searchTest(t, db, "simple", []string{"foox"}, []string{"foox", "blorgfoox", "mug_foox_ugh"})
+	searchTest(t, db, "start pinned", []string{"^foox"}, []string{"foox"})
+	searchTest(t, db, "end pinned", []string{"foox$"}, []string{"foox", "blorgfoox"})
+	searchTest(t, db, "start/end pinned", []string{"^foox$"}, []string{"foox"})
+	searchTest(t, db, "partial match but zero result", []string{"^_ugh"}, []string{})
 	searchTest(t, db, "respect user trigram positions", []string{"cron$"}, []string{"rose_daffodil_cron"})
 	searchTest(t, db, "full long metric name", []string{"rose_daffodil_cron"}, []string{"rose_daffodil_cron"})
 	searchTest(t, db, "full long metric name pinned", []string{"^rose_daffodil_cron$"}, []string{"rose_daffodil_cron"})
 	searchTest(t, db, "full long metric name, but broken pins", []string{"$rose_daffodil_cron^"}, []string{})
 
-	searchTest(t, db, "text filter intersects, not unions", []string{"^pop", "baz"}, []string{"popbaz"})
+	searchTest(t, db, "text filter intersects, not unions", []string{"^kpop", "bazz"}, []string{"kpopbazz"})
 }
 
 func searchTest(t *testing.T, db *Database, testName string, searches, expected []string) {

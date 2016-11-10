@@ -43,15 +43,15 @@ func TestQuery(t *testing.T) {
 
 	in := NewIndex()
 	metrics = []string{
-		"foo",
-		"bar",
-		"baz",
-		"blorgfoo",
-		"mug_foo_ugh",
+		"foox",
+		"bart",
+		"bazz",
+		"blorgfoox",
+		"mug_foox_ugh",
 		// we don't care about positions in the bloom query, because it has no notion of positions
 		"ron.crocodile.option",
 		"rose.daffodil.cron",
-		"popbaz",
+		"kpopbazz",
 	}
 	hashes := index.HashMetrics(metrics)
 	err = in.AddMetrics(metrics, hashes)
@@ -73,14 +73,14 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
-	searchTest(t, "zero results", in, []string{"qux"}, []string{})
-	searchTest(t, "simple", in, []string{"foo"}, []string{"foo", "blorgfoo", "mug_foo_ugh"})
+	searchTest(t, "zero results", in, []string{"quxx"}, []string{})
+	searchTest(t, "simple", in, []string{"foox"}, []string{"foox", "blorgfoox", "mug_foox_ugh"})
 	searchTest(t, "full long metric name", in, []string{"rose.daffodil.cron"}, []string{"rose.daffodil.cron"})
-	searchTest(t, "intersect, not union", in, []string{"pop", "baz"}, []string{"popbaz"})
+	searchTest(t, "intersect, not union", in, []string{"kpop", "bazz"}, []string{"kpopbazz"})
 
 	emptyIndex := NewIndex()
-	searchTest(t, "zero results", emptyIndex, []string{"qux"}, []string{})
-	searchTest(t, "simple", emptyIndex, []string{"foo"}, []string{})
+	searchTest(t, "zero results", emptyIndex, []string{"quxx"}, []string{})
+	searchTest(t, "simple", emptyIndex, []string{"foox"}, []string{})
 }
 
 func searchTest(t *testing.T, testName string, in *Index, searches []string, expectedResults []string) {
