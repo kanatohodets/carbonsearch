@@ -151,6 +151,7 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 		)
 	}
 
+	index.SortMetrics(metrics)
 	return metrics, nil
 }
 
