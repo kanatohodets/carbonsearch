@@ -264,9 +264,7 @@ func tokenize(term string) ([]uint32, error) {
 	tokens := make([]uint32, 0, len(term)-3)
 	for i := 0; i <= len(term)-n; i++ {
 		var chunk [n]byte
-		for j := 0; j < len(chunk); j++ {
-			chunk[j] = term[i+j]
-		}
+		copy(chunk[:], term[i:i+n])
 		tokens = append(tokens, ngramize(chunk))
 	}
 
@@ -274,5 +272,5 @@ func tokenize(term string) ([]uint32, error) {
 }
 
 func ngramize(s [n]byte) uint32 {
-	return uint32(s[0])<<16 | uint32(s[1])<<8 | uint32(s[2])<<4 | uint32(s[3])
+	return uint32(s[0])<<24 | uint32(s[1])<<16 | uint32(s[2])<<8 | uint32(s[3])
 }
