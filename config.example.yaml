@@ -18,9 +18,7 @@ full_index_service: "custom"
 text_index_service: "text"
 # mapping of join key -> query prefix for split indexes. for example: the
 # 'servers' data source in 'servers-dc:us_east' associates tags with metrics
-# through the 'fqdn' join key. you can have multiple data sources that
-# associate using the same join key, but each data source can use only one join
-# key.
+# through the 'fqdn' join key.
 split_indexes:
     fqdn: "servers"
 
