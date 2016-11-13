@@ -18,8 +18,6 @@ import (
 
 var logger mlog.Level
 
-//TODO(nnuss): import "github.com/dgryski/carbonzipper/mlog"
-
 // Database abstracts over contained indexes
 type Database struct {
 	stats *util.Stats
@@ -88,8 +86,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 	}
 
 	// query indexes, take intersection of metrics
-	// NOTE(nnuss): the first dimension of metricSets is len(queriesByIndex)
-	metricSets := [][]index.Metric{}
+	metricSets := make([][]index.Metric, 0, len(queriesByIndex))
 	for targetIndex, query := range queriesByIndex {
 		metrics, err := targetIndex.Query(query)
 		if err != nil {
@@ -141,7 +138,6 @@ func (db *Database) MaterializeIndexes() error {
 
 // InsertMetrics TODO:...
 //NOTE(nnuss) -- to me this is logically the right-hand or downstream side of the si
-//TODO(btyler) -- do we want to auto-create indexes?
 func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	if msg.Value == "" {
 		return fmt.Errorf("database: metric batch has an empty join key value")
