@@ -122,6 +122,12 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 		if len(list) == 0 {
 			return []Metric{}
 		}
+
+		if debug {
+			if !sort.IsSorted(MetricSlice(list)) {
+				panic("IntersectMetrics: passed unsorted slice")
+			}
+		}
 	}
 
 	h := MetricSetsHeap(metricSets)
@@ -211,6 +217,12 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return []Tag{}
+		}
+
+		if debug {
+			if !sort.IsSorted(TagSlice(list)) {
+				panic("IntersectTags: passed unsorted slice")
+			}
 		}
 	}
 
