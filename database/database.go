@@ -30,10 +30,10 @@ type Database struct {
 	// not protected by a lock: it's read only once the database is created
 	splitIndexes map[string]*split.Index
 
-	metrics      map[index.Metric]string
-	metricsMutex sync.RWMutex
-
 	fullIndexService string
+
+	writeMut    sync.RWMutex
+	writeBuffer *writeBuffer
 
 	FullIndex *full.Index
 	TextIndex *bloom.Index
@@ -126,18 +126,30 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 // if consistency becomes an issue (symptoms: metrics without mappings, or
 // queries with mysteriously lacking metrics), we can put a lock around AddMetrics
 // that globally protects indexes from writes during materialization
+// TODO: do these concurrently, then only do atomic swap when they're all done generating the thing
 func (db *Database) MaterializeIndexes() error {
-	// materialize the text index first, since it has the mapping for metric -> string
-	err := db.TextIndex.Materialize()
+	db.writeMut.RLock()
+	defer db.writeMut.RUnlock()
+
+	err := db.TextIndex.Materialize(db.writeBuffer.MetricList())
 	if err != nil {
 		return fmt.Errorf("database: error while materializing text index %v: %v", db.TextIndex.Name(), err)
 	}
 
-	for _, index := range db.splitIndexes {
-		err := index.Materialize()
+	for name, index := range db.splitIndexes {
+		buf, ok := db.writeBuffer.splits[name]
+		if !ok {
+			panic(fmt.Sprintf("there's an index without a matching write buffer. this is an error in the code that initializes the database/split indexes: it must call writeBuffer.AddSplitIndex(%q)", name))
+		}
+		err := index.Materialize(buf.joinToMetric, buf.tagToJoin)
 		if err != nil {
 			return fmt.Errorf("database: error while materializing split index %v: %v", index.Name(), err)
 		}
+	}
+
+	err = db.FullIndex.Materialize(db.writeBuffer.full)
+	if err != nil {
+		return fmt.Errorf("database: error while materializing full index: %v", err)
 	}
 	return nil
 }
@@ -153,29 +165,21 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 	}
 
 	// only happens in the write-side
-	si, ok := db.splitIndexes[msg.Key]
+	_, ok := db.splitIndexes[msg.Key]
 	if !ok {
 		return fmt.Errorf("database InsertMetrics: no split index for join key %q", msg.Key)
 	}
 
+	db.writeMut.Lock()
+	err := db.writeBuffer.BufferMetrics(msg.Key, msg.Value, msg.Metrics)
+	db.writeMut.Unlock()
+	if err != nil {
+		//TODO(btyler): metric for metric add errors
+		return fmt.Errorf("database: error buffering metric batch: %v", err)
+	}
+
 	db.stats.MetricMessages.Add(1)
-
-	// []string => []Metric
-	metricHashes := index.HashMetrics(msg.Metrics)
-	// add to text index, this should come before the split index adding so
-	// that we're sure the index.Metric->string mapping contains this metric
-	err := db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
-	if err != nil {
-		return fmt.Errorf("database: could not add metrics to text index: %s", err)
-	}
-
-	// add metricHashes to right-side[msg.Value]
-	err = si.AddMetrics(msg.Value, metricHashes)
-	if err != nil {
-		return fmt.Errorf("database: could not add metrics to metric side of index %q: %s", msg.Key, err)
-	}
-
-	db.stats.MetricsIndexed.Add(int64(len(metricHashes)))
+	db.stats.MetricsIndexed.Add(int64(len(msg.Metrics)))
 	return nil
 }
 
@@ -194,16 +198,22 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 		return fmt.Errorf("database InsertTags: no split index for join key %q", msg.Key)
 	}
 
-	db.stats.TagMessages.Add(1)
-
-	tags := db.validateServiceIndexPairs(msg.Tags, si, msg.Key)
-
-	err := si.AddTags(msg.Value, tags)
+	// TODO(btyler) avoid parsing tags twice (once in validateServiceIndexPairs, again in BufferTags)
+	err := db.validateServiceIndexPairs(msg.Tags, si, msg.Key)
 	if err != nil {
-		return fmt.Errorf("database: could not add tags to tag side of index %q: %s", msg.Key, err)
+		return fmt.Errorf("database: tag batch failed validation for index %q: %s", msg.Key, err)
 	}
 
-	db.stats.TagsIndexed.Add(int64(len(tags)))
+	db.writeMut.Lock()
+	err = db.writeBuffer.BufferTags(msg.Key, msg.Value, msg.Tags)
+	db.writeMut.Unlock()
+	if err != nil {
+		//TODO(btyler): metric for tag add errors
+		return fmt.Errorf("database: error buffering metric batch: %v", err)
+	}
+
+	db.stats.TagMessages.Add(1)
+	db.stats.TagsIndexed.Add(int64(len(msg.Tags)))
 	return nil
 }
 
@@ -216,53 +226,40 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 		return fmt.Errorf("database: custom batch must have at least one tag")
 	}
 
-	tags := index.HashTags(db.validateServiceIndexPairs(msg.Tags, db.FullIndex, db.fullIndexService))
+	err := db.validateServiceIndexPairs(msg.Tags, db.FullIndex, db.fullIndexService)
+	if err != nil {
+		return fmt.Errorf("database: custom batch failed validation: %s", err)
+	}
+
+	db.writeMut.Lock()
+	err = db.writeBuffer.BufferCustom(msg.Tags, msg.Metrics)
+	db.writeMut.Unlock()
+	if err != nil {
+		return fmt.Errorf("database: error buffering metric batch: %v", err)
+	}
 
 	db.stats.CustomMessages.Add(1)
-
-	metricHashes := index.HashMetrics(msg.Metrics)
-
-	// add to text index, this should come before the full index adding so
-	// that we're sure the index.Metric->string mapping contains this metric
-	err := db.TextIndex.AddMetrics(msg.Metrics, metricHashes)
-	if err != nil {
-		return fmt.Errorf("database: could not add metrics to text index: %s", err)
-	}
-
-	err = db.FullIndex.Add(tags, metricHashes)
-	if err != nil {
-		return fmt.Errorf("database: error while adding to custom index: %s", err)
-	}
-
-	db.stats.FullIndexTags.Set(int64(db.FullIndex.TagSize()))
-	db.stats.FullIndexMetrics.Set(int64(db.FullIndex.MetricSize()))
-
 	return nil
 }
 
-// NOTE(btyler): we're being permissive here and only skipping adding tags with
-// a bad service for this index. this contrasts with discarding the entire update.
-func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.Index, indexName string) []string {
-	valid := []string{}
+func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.Index, indexName string) error {
 	for _, queryTag := range tags {
 		service, _, _, err := tag.Parse(queryTag)
 		if err != nil {
-			logger.Logln("database: tag parse error while validating service-tag pairs, skipping ", err)
-			continue
+			return fmt.Errorf("database: tag parse error while validating service-tag pairs, skipping batch, %v", err)
 		}
 
 		mappedIndex, ok := db.serviceToIndex[service]
 		if ok {
-			if mappedIndex == givenIndex {
-				valid = append(valid, queryTag)
+			if mappedIndex != givenIndex {
+				return fmt.Errorf("database: service %q is mapped to the %v index, but something is writing to carbonsearch expecting it to be associated with the %q index.", service, mappedIndex.Name(), indexName)
 			}
 		} else {
-			logger.Logf("database: service %q has no mapped index, but something is writing to carbonsearch expecting it to be associated with the %q index. if this assocation is intended, add it to config.yaml", service, indexName)
-			continue
+			return fmt.Errorf("database: service %q has no mapped index, but something is writing to carbonsearch expecting it to be associated with the %q index. if this assocation is intended, add it to config.yaml", service, indexName)
 		}
 	}
 
-	return valid
+	return nil
 }
 
 // New initializes a new Database
@@ -284,11 +281,16 @@ func New(
 		serviceToIndex[textIndexService] = textIndex
 	}
 
+	writeBuffer := NewWriteBuffer()
 	splitIndexes := map[string]*split.Index{}
 	for joinKey, service := range splitIndexConfig {
 		index := split.NewIndex(joinKey)
 		splitIndexes[joinKey] = index
 		serviceToIndex[service] = index
+		err := writeBuffer.AddSplitIndex(joinKey)
+		if err != nil {
+			panic(fmt.Sprintf("database: %v has already been loaded. This likely means the config file has %v listed multiple times", joinKey, joinKey))
+		}
 	}
 
 	db := &Database{
@@ -300,9 +302,9 @@ func New(
 
 		splitIndexes: splitIndexes,
 
-		metrics: make(map[index.Metric]string),
-
 		fullIndexService: fullIndexService,
+
+		writeBuffer: writeBuffer,
 
 		FullIndex: fullIndex,
 		TextIndex: textIndex,

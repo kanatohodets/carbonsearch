@@ -64,7 +64,6 @@ return final intersected set
 
 import (
 	"container/heap"
-	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -101,23 +100,16 @@ type Index struct {
 	// to be able to support "set" at the service-key level
 	// "service-key:blue" un-sets "service-key:orange"
 	// The common case is there is 1 index.Tag
-	tagToJoinMutable map[tag.ServiceKey]map[Join][]index.Tag
-	tagMutex         sync.RWMutex
-	writtenTags      uint32
+	writtenTags uint32
 
-	joinToMetricMutable map[Join][]index.Metric
-	metricMutex         sync.RWMutex
-	writtenJoins        uint32
-	writtenMetrics      uint32
+	metricMutex    sync.RWMutex
+	writtenJoins   uint32
+	writtenMetrics uint32
 }
 
 func NewIndex(joinKey string) *Index {
 	n := Index{
 		joinKey: joinKey,
-
-		tagToJoinMutable: make(map[tag.ServiceKey]map[Join][]index.Tag),
-
-		joinToMetricMutable: make(map[Join][]index.Metric),
 	}
 	n.tagToJoin.Store(make(map[index.Tag][]Join))
 	n.joinToMetric.Store(make(map[Join][]index.Metric))
@@ -125,88 +117,16 @@ func NewIndex(joinKey string) *Index {
 	return &n
 }
 
-// AddMetrics adds documents to the rawJoin entry in the metric/right-side index in si.
-// TODO(nnuss): len(metrics) == 0 is the only error condition and can probably be removed as adding zero things is actually easy.
-// Also this and AddTags should be merged.
-func (si *Index) AddMetrics(rawJoin string, metrics []index.Metric) error {
-	if len(metrics) == 0 {
-		return fmt.Errorf("split index: cannot add 0 metrics to join %q", rawJoin)
-	}
-
-	join := HashJoin(rawJoin)
-
-	si.metricMutex.Lock()
-	defer si.metricMutex.Unlock()
-
-	writtenJoins := si.WrittenJoins()
-	metricList, ok := si.joinToMetricMutable[join]
-	if !ok {
-		metricList = []index.Metric{}
-		si.joinToMetricMutable[join] = metricList
-		si.SetWrittenJoins(writtenJoins + 1)
-	}
-
-	existingMember := make(map[index.Metric]bool)
-
-	for _, metric := range metricList {
-		existingMember[metric] = true
-	}
-
-	writtenMetrics := si.WrittenMetrics()
-	for _, metric := range metrics {
-		_, ok := existingMember[metric]
-		if !ok {
-			writtenMetrics++
-			metricList = append(metricList, metric)
-		}
-	}
-
-	index.SortMetrics(metricList)
-	si.joinToMetricMutable[join] = metricList
-	si.SetWrittenMetrics(writtenMetrics)
-	return nil
-}
-
-// AddTags adds rawJoin to the value of { every one of tags[] } entries in the tag/left-side index of si
-// argh this needs to have the actual Tag
-func (si *Index) AddTags(rawJoin string, tags []string) error {
-	if len(tags) == 0 {
-		return fmt.Errorf("split index: cannot add 0 tags to join %q", rawJoin)
-	}
-
-	join := HashJoin(rawJoin)
-
-	si.tagMutex.Lock()
-	defer si.tagMutex.Unlock()
-
-	for _, t := range tags {
-		s, k, _, err := tag.Parse(t)
-		if err != nil {
-			continue
-		}
-		sk := HashServiceKey(s + "-" + k)
-		joinList, ok := si.tagToJoinMutable[sk]
-		if !ok {
-			joinList = make(map[Join][]index.Tag)
-			si.tagToJoinMutable[sk] = joinList
-		}
-		joinList[join] = index.HashTags(tags)
-	}
-
-	return nil
-}
-
 // Materialize copies the mutable indexes to new read-only ones and swaps out the existing ones.
-func (si *Index) Materialize() error {
+func (si *Index) Materialize(
+	joinToMetricBuffer map[Join]map[index.Metric]struct{},
+	tagToJoinBuffer map[tag.ServiceKey]map[Join]index.Tag,
+) error {
 	start := time.Now()
 	tagToJoin := make(map[index.Tag][]Join)
-	si.tagMutex.RLock()
-	defer si.tagMutex.RUnlock()
-	for _, m := range si.tagToJoinMutable {
-		for join, tags := range m {
-			for _, tag := range tags {
-				tagToJoin[tag] = append(tagToJoin[tag], join)
-			}
+	for _, joinTagPairs := range tagToJoinBuffer {
+		for join, tag := range joinTagPairs {
+			tagToJoin[tag] = append(tagToJoin[tag], join)
 		}
 	}
 
@@ -215,15 +135,15 @@ func (si *Index) Materialize() error {
 	}
 
 	joinToMetric := make(map[Join][]index.Metric)
-	si.metricMutex.RLock()
-	defer si.metricMutex.RUnlock()
 	var readableMetrics uint32
-	// must copy data to avoid sharing a slice header between read and write
-	for join, metrics := range si.joinToMetricMutable {
-		copied := make([]index.Metric, len(metrics))
-		copy(copied, metrics)
-		joinToMetric[join] = copied
-		readableMetrics += uint32(len(metrics))
+	for join, metrics := range joinToMetricBuffer {
+		for metric, _ := range metrics {
+			joinToMetric[join] = append(joinToMetric[join], metric)
+		}
+	}
+
+	for _, metricList := range joinToMetric {
+		index.SortMetrics(metricList)
 	}
 
 	si.tagToJoin.Store(tagToJoin)

@@ -9,11 +9,22 @@ import (
 func TestQuery(t *testing.T) {
 	metricName := "server.hostname-1234"
 
-	metrics := index.HashMetrics([]string{metricName})
+	hashedMetrics := index.HashMetrics([]string{metricName})
 	tags := index.HashTags([]string{"server-state:live", "server-dc:lhr"})
 	in := NewIndex()
 
-	in.Add(tags, metrics)
+	buffer := map[index.Tag]map[index.Metric]struct{}{}
+	for _, tag := range tags {
+		tagSet, ok := buffer[tag]
+		if !ok {
+			tagSet = map[index.Metric]struct{}{}
+			buffer[tag] = tagSet
+		}
+		for _, metric := range hashedMetrics {
+			tagSet[metric] = struct{}{}
+		}
+	}
+	in.Materialize(buffer)
 	query := index.NewQuery([]string{"server-state:live"})
 	result, err := in.Query(query)
 	if err != nil {

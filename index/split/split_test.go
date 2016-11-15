@@ -1,10 +1,12 @@
 package split
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/kanatohodets/carbonsearch/index"
-	"github.com/kanatohodets/carbonsearch/util/test"
+	"github.com/kanatohodets/carbonsearch/tag"
+	//"github.com/kanatohodets/carbonsearch/util/test"
 )
 
 func TestSortJoins(t *testing.T) {
@@ -46,13 +48,11 @@ func TestQuery(t *testing.T) {
 	host := "hostname-1234"
 
 	in := NewIndex("host")
-	metrics := index.HashMetrics([]string{metricName})
+	metrics := []string{metricName}
 	tags := []string{"server-state:live", "server-dc:lhr"}
 	query := index.NewQuery([]string{"server-state:live"})
 
-	in.AddMetrics(host, metrics)
-	in.AddTags(host, tags)
-	_ = in.Materialize()
+	_ = in.Materialize(prepareBuffer(host, tags, metrics))
 	result, err := in.Query(query)
 	if err != nil {
 		t.Error(err)
@@ -80,10 +80,9 @@ func BenchmarkSmallsetQuery(b *testing.B) {
 	host := "hostname-1234"
 	in := NewIndex("host")
 	tags := []string{"server-state:live", "server-dc:lhr"}
-	metrics := index.HashMetrics([]string{metricName})
+	metrics := []string{metricName}
 
-	in.AddMetrics(host, metrics)
-	in.AddTags(host, tags)
+	in.Materialize(prepareBuffer(host, tags, metrics))
 
 	query := index.NewQuery([]string{"server-state:live"})
 	b.ResetTimer()
@@ -92,13 +91,14 @@ func BenchmarkSmallsetQuery(b *testing.B) {
 	}
 }
 
+/*
 func BenchmarkLargesetQuery(b *testing.B) {
 	b.StopTimer()
 	in := NewIndex("host")
 	hosts := test.GetJoinCorpus(100)
 	queryTerms := []string{}
 	for _, host := range hosts {
-		in.AddMetrics(host, index.HashMetrics(test.GetMetricCorpus(1000)))
+		index.HashMetrics(test.GetMetricCorpus(1000)))
 		tags := test.GetTagCorpus(10)
 		if test.Rand().Intn(15) == 1 {
 			queryTerms = append(queryTerms, tags[test.Rand().Int()%len(tags)])
@@ -112,6 +112,7 @@ func BenchmarkLargesetQuery(b *testing.B) {
 		in.Query(query)
 	}
 }
+*/
 
 // TODO(btyler) consolidate this into a testing table
 func TestIntersectJoins(t *testing.T) {
@@ -199,4 +200,35 @@ func TestIntersectJoins(t *testing.T) {
 		t.Error("index test: somehow a universe of 1 resulted in an intersection of 1, but not that 1. wtf o_o")
 		return
 	}
+}
+
+//TODO(btyler): fix up the APIs a bit so this is less of a pain/copy with database.writeBuffer.BufferMetrics/BufferTags
+func prepareBuffer(rawJoin string, rawTags, rawMetrics []string) (map[Join]map[index.Metric]struct{}, map[tag.ServiceKey]map[Join]index.Tag) {
+	joinToMetric := map[Join]map[index.Metric]struct{}{}
+	tagToJoin := map[tag.ServiceKey]map[Join]index.Tag{}
+
+	join := HashJoin(rawJoin)
+	tags := index.HashTags(rawTags)
+
+	joinToMetric[join] = map[index.Metric]struct{}{}
+	for _, rawMetric := range rawMetrics {
+		metric := index.HashMetric(rawMetric)
+		joinToMetric[join][metric] = struct{}{}
+	}
+
+	for i, rawTag := range rawTags {
+		s, k, _, err := tag.Parse(rawTag)
+		if err != nil {
+			panic(fmt.Sprintf("failed to parse a tag %q for a test case: %v. this is a bug in the tests", rawTag, err))
+
+		}
+		sk := HashServiceKey(s + "-" + k)
+		tagValueForJoins, ok := tagToJoin[sk]
+		if !ok {
+			tagValueForJoins = map[Join]index.Tag{}
+			tagToJoin[sk] = tagValueForJoins
+		}
+		tagValueForJoins[join] = tags[i]
+	}
+	return joinToMetric, tagToJoin
 }

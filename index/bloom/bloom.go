@@ -178,8 +178,12 @@ func (ti *Index) AddMetrics(rawMetrics []string, metrics []index.Metric) error {
 	return nil
 }
 
-func (ti *Index) Materialize() error {
+//TODO(btyler) synchronize this so it does the heavy lifting first, then waits to do atomic swap
+// alternatively keep a diff
+func (ti *Index) Materialize(rawMetrics []string) error {
 	start := time.Now()
+
+	hashed := index.HashMetrics(rawMetrics)
 
 	newBloom := bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes)
 	docToMetric := map[bloomindex.DocID]index.Metric{}
@@ -188,15 +192,17 @@ func (ti *Index) Materialize() error {
 	// NOTE(btyler): grouping these into the same lock means we hang on to the
 	// lock a bit longer, but for consistency I think it's best to always have
 	// the same contents in the two
-	ti.mut.RLock()
-	for metric, tokens := range ti.mutableMetrics {
+	for i, rawMetric := range rawMetrics {
+		tokens, err := tokenize(rawMetric)
+		if err != nil {
+			return fmt.Errorf("%s Materialize: can't tokenize %v: %v", ti.Name(), rawMetric, err)
+		}
 		docID := newBloom.AddDocument(tokens)
+
+		metric := hashed[i]
 		docToMetric[docID] = metric
-	}
-	for metric, rawMetric := range ti.mutableMetricMap {
 		newMetricMap[metric] = rawMetric
 	}
-	ti.mut.RUnlock()
 
 	ti.bloom.Store(newBloom)
 	ti.docToMetric.Store(docToMetric)

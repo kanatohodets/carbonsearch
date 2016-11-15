@@ -13,14 +13,8 @@ func TestQuery(t *testing.T) {
 		"user.messing_around_in_test",
 		"monitors.nginx.http.daily",
 	}
-	hashed := index.HashMetrics(metrics)
-	err := ti.AddMetrics(metrics, hashed)
-	if err != nil {
-		t.Error(err)
-		return
-	}
 
-	ti.Materialize()
+	ti.Materialize(metrics)
 
 	q := index.NewQuery([]string{
 		"text-match:nginx",
@@ -36,6 +30,7 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
+	hashed := index.HashMetrics(metrics)
 	if results[0] != hashed[2] {
 		t.Errorf("expected %q in search result, got %q", hashed[2], results[0])
 		return
@@ -53,13 +48,7 @@ func TestQuery(t *testing.T) {
 		"rose.daffodil.cron",
 		"kpopbazz",
 	}
-	hashes := index.HashMetrics(metrics)
-	err = in.AddMetrics(metrics, hashes)
-	if err != nil {
-		t.Errorf("addmetrics returned an error: %v", err)
-		return
-	}
-	err = in.Materialize()
+	err = in.Materialize(metrics)
 	if err != nil {
 		t.Errorf("materialize returned an error: %v", err)
 		return
