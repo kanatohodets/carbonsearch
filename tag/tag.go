@@ -10,7 +10,7 @@ type Key uint64
 
 // Parse separates a "service-key:value" tag into "service", "key", and "value". If the tag is malformed an error is returned.
 func Parse(tag string) (string, string, string, error) {
-	serviceMark, kvMarker, err := validate(tag)
+	serviceMark, kvMarker, err := getPositions(tag)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -27,7 +27,13 @@ func ParseService(tag string) (string, error) {
 	return s, err
 }
 
-func validate(tag string) (int, int, error) {
+// Validate checks whether the tag can be parsed
+func Validate(tag string) error {
+	_, _, err := getPositions(tag)
+	return err
+}
+
+func getPositions(tag string) (int, int, error) {
 	serviceDelimiter := strings.Index(tag, "-")
 	kvMarker := strings.Index(tag, ":")
 	hasDots := strings.Index(tag, ".")

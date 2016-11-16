@@ -48,11 +48,7 @@ func TestQuery(t *testing.T) {
 		"rose.daffodil.cron",
 		"kpopbazz",
 	}
-	err = in.Materialize(metrics)
-	if err != nil {
-		t.Errorf("materialize returned an error: %v", err)
-		return
-	}
+	in.Materialize(metrics)
 
 	// bad query
 	query := index.NewQuery([]string{})

@@ -117,11 +117,15 @@ func NewIndex(joinKey string) *Index {
 	return &n
 }
 
-// Materialize copies the mutable indexes to new read-only ones and swaps out the existing ones.
+// Materialize copies the mutable indexes to new read-only ones and swaps out
+// the existing ones.
+//
+// Materialize should panic in case of any problems with the data -- that
+// should have been caught by validation before going into the write buffer
 func (si *Index) Materialize(
 	joinToMetricBuffer map[Join]map[index.Metric]struct{},
 	tagToJoinBuffer map[tag.ServiceKey]map[Join]index.Tag,
-) error {
+) {
 	start := time.Now()
 	tagToJoin := make(map[index.Tag][]Join)
 	for _, joinTagPairs := range tagToJoinBuffer {
@@ -157,8 +161,6 @@ func (si *Index) Materialize(
 	g := si.Generation()
 	elapsed := time.Since(start)
 	logger.Logf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
-
-	return nil
 }
 
 func (si *Index) Query(q *index.Query) ([]index.Metric, error) {

@@ -52,7 +52,7 @@ func TestQuery(t *testing.T) {
 	tags := []string{"server-state:live", "server-dc:lhr"}
 	query := index.NewQuery([]string{"server-state:live"})
 
-	_ = in.Materialize(prepareBuffer(host, tags, metrics))
+	in.Materialize(prepareBuffer(host, tags, metrics))
 	result, err := in.Query(query)
 	if err != nil {
 		t.Error(err)

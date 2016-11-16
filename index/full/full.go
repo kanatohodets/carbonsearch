@@ -26,7 +26,9 @@ func NewIndex() *Index {
 	return fi
 }
 
-func (fi *Index) Materialize(fullBuffer map[index.Tag]map[index.Metric]struct{}) error {
+// Materialize should panic in case of any problems with the data -- that
+// should have been caught by validation before going into the write buffer
+func (fi *Index) Materialize(fullBuffer map[index.Tag]map[index.Metric]struct{}) {
 	start := time.Now()
 
 	fullIndex := make(map[index.Tag][]index.Metric)
@@ -50,8 +52,6 @@ func (fi *Index) Materialize(fullBuffer map[index.Tag]map[index.Metric]struct{})
 	g := fi.Generation()
 	elapsed := time.Since(start)
 	logger.Logf("full index: New generation %v took %v to generate", g, elapsed)
-
-	return nil
 }
 func (fi *Index) Query(q *index.Query) ([]index.Metric, error) {
 	in := fi.Index()

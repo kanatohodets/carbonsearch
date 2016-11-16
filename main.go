@@ -334,10 +334,7 @@ func main() {
 	go func() {
 		for {
 			time.Sleep(rotationRate)
-			err := db.MaterializeIndexes()
-			if err != nil {
-				logger.Logf("Error materializing indexes: %v", err)
-			}
+			db.MaterializeIndexes()
 		}
 	}()
 

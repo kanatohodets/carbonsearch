@@ -127,31 +127,21 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 // queries with mysteriously lacking metrics), we can put a lock around AddMetrics
 // that globally protects indexes from writes during materialization
 // TODO: do these concurrently, then only do atomic swap when they're all done generating the thing
-func (db *Database) MaterializeIndexes() error {
+func (db *Database) MaterializeIndexes() {
 	db.writeMut.RLock()
 	defer db.writeMut.RUnlock()
 
-	err := db.TextIndex.Materialize(db.writeBuffer.MetricList())
-	if err != nil {
-		return fmt.Errorf("database: error while materializing text index %v: %v", db.TextIndex.Name(), err)
-	}
+	db.TextIndex.Materialize(db.writeBuffer.MetricList())
 
 	for name, index := range db.splitIndexes {
 		buf, ok := db.writeBuffer.splits[name]
 		if !ok {
 			panic(fmt.Sprintf("there's an index without a matching write buffer. this is an error in the code that initializes the database/split indexes: it must call writeBuffer.AddSplitIndex(%q)", name))
 		}
-		err := index.Materialize(buf.joinToMetric, buf.tagToJoin)
-		if err != nil {
-			return fmt.Errorf("database: error while materializing split index %v: %v", index.Name(), err)
-		}
+		index.Materialize(buf.joinToMetric, buf.tagToJoin)
 	}
 
-	err = db.FullIndex.Materialize(db.writeBuffer.full)
-	if err != nil {
-		return fmt.Errorf("database: error while materializing full index: %v", err)
-	}
-	return nil
+	db.FullIndex.Materialize(db.writeBuffer.full)
 }
 
 // InsertMetrics TODO:...
@@ -170,8 +160,10 @@ func (db *Database) InsertMetrics(msg *m.KeyMetric) error {
 		return fmt.Errorf("database InsertMetrics: no split index for join key %q", msg.Key)
 	}
 
+	validMetrics := db.validateMetrics(msg.Metrics)
+
 	db.writeMut.Lock()
-	err := db.writeBuffer.BufferMetrics(msg.Key, msg.Value, msg.Metrics)
+	err := db.writeBuffer.BufferMetrics(msg.Key, msg.Value, validMetrics)
 	db.writeMut.Unlock()
 	if err != nil {
 		//TODO(btyler): metric for metric add errors
@@ -204,8 +196,10 @@ func (db *Database) InsertTags(msg *m.KeyTag) error {
 		return fmt.Errorf("database: tag batch failed validation for index %q: %s", msg.Key, err)
 	}
 
+	validTags := db.validateTags(msg.Tags)
+
 	db.writeMut.Lock()
-	err = db.writeBuffer.BufferTags(msg.Key, msg.Value, msg.Tags)
+	err = db.writeBuffer.BufferTags(msg.Key, msg.Value, validTags)
 	db.writeMut.Unlock()
 	if err != nil {
 		//TODO(btyler): metric for tag add errors
@@ -231,8 +225,11 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 		return fmt.Errorf("database: custom batch failed validation: %s", err)
 	}
 
+	validMetrics := db.validateMetrics(msg.Metrics)
+	validTags := db.validateTags(msg.Tags)
+
 	db.writeMut.Lock()
-	err = db.writeBuffer.BufferCustom(msg.Tags, msg.Metrics)
+	err = db.writeBuffer.BufferCustom(validTags, validMetrics)
 	db.writeMut.Unlock()
 	if err != nil {
 		return fmt.Errorf("database: error buffering metric batch: %v", err)
@@ -240,6 +237,26 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 
 	db.stats.CustomMessages.Add(1)
 	return nil
+}
+
+//TODO(btyler) it might be nice to change this to log on a per-broken metric
+// basis, or if we have validations from other indexes, to have each of them
+// generate a blacklist and report on why things failed validation.
+func (db *Database) validateMetrics(metrics []string) []string {
+	return db.TextIndex.ValidateMetrics(metrics)
+}
+
+func (db *Database) validateTags(tags []string) []string {
+	validTags := make([]string, 0, len(tags))
+	for _, rawTag := range tags {
+		err := tag.Validate(rawTag)
+		if err != nil {
+			continue
+		}
+		validTags = append(validTags, rawTag)
+	}
+
+	return validTags
 }
 
 func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.Index, indexName string) error {

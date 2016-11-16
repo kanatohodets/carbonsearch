@@ -157,7 +157,9 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 
 //TODO(btyler) synchronize this so it does the heavy lifting first, then waits to do atomic swap
 // alternatively keep a diff
-func (ti *Index) Materialize(rawMetrics []string) error {
+// Materialize should panic in case of any problems with the data -- that
+// should have been caught by validation before going into the write buffer
+func (ti *Index) Materialize(rawMetrics []string) {
 	start := time.Now()
 
 	hashed := index.HashMetrics(rawMetrics)
@@ -169,7 +171,7 @@ func (ti *Index) Materialize(rawMetrics []string) error {
 	for i, rawMetric := range rawMetrics {
 		tokens, err := tokenize(rawMetric)
 		if err != nil {
-			return fmt.Errorf("%s Materialize: can't tokenize %v: %v", ti.Name(), rawMetric, err)
+			panic(fmt.Sprintf("%s Materialize: can't tokenize %v: %v. this should have been caught by validation before adding the metric to the write buffer, hence the panic", ti.Name(), rawMetric, err))
 		}
 		docID := newBloom.AddDocument(tokens)
 
@@ -189,7 +191,18 @@ func (ti *Index) Materialize(rawMetrics []string) error {
 	elapsed := time.Since(start)
 
 	log.Printf("text index %s: New generation %v took %v to generate", ti.Name(), g, elapsed)
-	return nil
+}
+
+func (ti *Index) ValidateMetrics(metrics []string) []string {
+	validMetrics := make([]string, 0, len(metrics))
+	for _, metric := range metrics {
+		if len(metric) >= n {
+			validMetrics = append(validMetrics, metric)
+		} else {
+			log.Printf("blargh %q is too short!", metric)
+		}
+	}
+	return validMetrics
 }
 
 // UnmapMetrics converts typed []uint64 metrics to string
