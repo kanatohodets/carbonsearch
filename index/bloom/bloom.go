@@ -15,18 +15,26 @@ import (
 
 const n = 4
 
-type Index struct {
-	bloom       atomic.Value //*bloomindex.Index
-	docToMetric atomic.Value //map[bloomindex.DocID]index.Metric
-	metricMap   atomic.Value //map[index.Metric]string
+type swappableBloom struct {
+	bloom       *bloomindex.Index
+	docToMetric map[bloomindex.DocID]index.Metric
+}
 
-	mut              sync.RWMutex
-	mutableMetrics   map[index.Metric][]uint32
-	mutableMetricMap map[index.Metric]string
+type Index struct {
+	active  atomic.Value //*swappableBloom
+	standby atomic.Value //*swappableBloom
+
+	metricMap atomic.Value //map[index.Metric]string
 
 	numHashes int
 	blockSize int
 	metaSize  int
+
+	// used to 'catch up' the new standby index when it's flipped from active to standby.
+	// this is needed because the 'catch up' goroutine might run longer than
+	// our materialization period, and if we don't protect the bloom index with
+	// a lock it'll race and corrupt itself.
+	catchup sync.Mutex
 
 	// reporting
 	readableMetrics uint32
@@ -36,17 +44,22 @@ type Index struct {
 
 func NewIndex() *Index {
 	ti := Index{
-		mutableMetrics:   map[index.Metric][]uint32{},
-		mutableMetricMap: map[index.Metric]string{},
-
 		//TODO(btyler): configurable?
 		numHashes: 4,
 		blockSize: 2048,
 		metaSize:  512 * 2048,
 	}
 
-	ti.bloom.Store(bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes))
-	ti.docToMetric.Store(map[bloomindex.DocID]index.Metric{})
+	ti.active.Store(&swappableBloom{
+		bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
+		map[bloomindex.DocID]index.Metric{},
+	})
+
+	ti.standby.Store(&swappableBloom{
+		bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
+		map[bloomindex.DocID]index.Metric{},
+	})
+
 	ti.metricMap.Store(map[index.Metric]string{})
 	return &ti
 }
@@ -140,7 +153,7 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 		tokens = append(tokens, searchTrigrams...)
 	}
 
-	docIDs := ti.BloomIndex().Query(tokens)
+	docIDs := ti.Active().bloom.Query(tokens)
 
 	metrics, err := ti.docsToMetrics(docIDs)
 	if err != nil {
@@ -156,7 +169,6 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 }
 
 //TODO(btyler) synchronize this so it does the heavy lifting first, then waits to do atomic swap
-// alternatively keep a diff
 // Materialize should panic in case of any problems with the data -- that
 // should have been caught by validation before going into the write buffer
 func (ti *Index) Materialize(rawMetrics []string) {
@@ -164,28 +176,62 @@ func (ti *Index) Materialize(rawMetrics []string) {
 
 	hashed := index.HashMetrics(rawMetrics)
 
-	newBloom := bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes)
-	docToMetric := map[bloomindex.DocID]index.Metric{}
+	ti.catchup.Lock()
+	defer ti.catchup.Unlock()
+
+	standby := ti.Standby()
 	newMetricMap := map[index.Metric]string{}
+	oldMetricMap := ti.MetricMap()
 
+	// these are used to 'catch up' the formerly-active index after it goes off duty
+	recentDocuments := []bloomindex.DocID{}
+	recentTokens := [][]uint32{}
+	recentMetrics := []index.Metric{}
 	for i, rawMetric := range rawMetrics {
-		tokens, err := tokenize(rawMetric)
-		if err != nil {
-			panic(fmt.Sprintf("%s Materialize: can't tokenize %v: %v. this should have been caught by validation before adding the metric to the write buffer, hence the panic", ti.Name(), rawMetric, err))
-		}
-		docID := newBloom.AddDocument(tokens)
-
 		metric := hashed[i]
-		docToMetric[docID] = metric
+		_, ok := oldMetricMap[metric]
+		if !ok {
+			tokens, err := tokenize(rawMetric)
+			if err != nil {
+				panic(fmt.Sprintf("%s Materialize: can't tokenize %v: %v. this should have been caught by validation before adding the metric to the write buffer, hence the panic", ti.Name(), rawMetric, err))
+			}
+			docID := standby.bloom.AddDocument(tokens)
+			recentDocuments = append(recentDocuments, docID)
+			recentTokens = append(recentTokens, tokens)
+			recentMetrics = append(recentMetrics, metric)
+
+			standby.docToMetric[docID] = metric
+		}
 		newMetricMap[metric] = rawMetric
 	}
 
-	ti.bloom.Store(newBloom)
-	ti.docToMetric.Store(docToMetric)
+	ti.SetReadableMetrics(uint32(len(standby.docToMetric)))
+
+	// swap active/standby
+	active := ti.Active()
+	ti.standby.Store(active)
+	ti.active.Store(standby)
+
+	go func(catchupDocuments []bloomindex.DocID, catchupTokens [][]uint32, catchupMetrics []index.Metric) {
+		ti.catchup.Lock()
+		defer ti.catchup.Unlock()
+		standby := ti.Standby()
+		for i, docID := range catchupDocuments {
+			// counting on the two bloom indexes increasing document ID in
+			// lockstep with each other. dgryski says this is a reasonable
+			// assumption, and not breaking the encapsulation of the bloom index
+			tokens := catchupTokens[i]
+			standbyDocID := standby.bloom.AddDocument(tokens)
+			if docID != standbyDocID {
+				panic("bloom index: our bloom indexes have diverged, and are not creating documents in lockstep! yikes!")
+			}
+			standby.docToMetric[standbyDocID] = catchupMetrics[i]
+		}
+	}(recentDocuments, recentTokens, recentMetrics)
+
 	ti.metricMap.Store(newMetricMap)
 
 	// update stats
-	ti.SetReadableMetrics(uint32(len(docToMetric)))
 	ti.IncrementGeneration()
 	g := ti.Generation()
 	elapsed := time.Since(start)
@@ -219,19 +265,19 @@ func (ti *Index) UnmapMetrics(metrics []index.Metric) ([]string, error) {
 	return rawMetrics, nil
 }
 
-func (ti *Index) BloomIndex() *bloomindex.Index {
-	return ti.bloom.Load().(*bloomindex.Index)
-}
-func (ti *Index) DocumentMap() map[bloomindex.DocID]index.Metric {
-	return ti.docToMetric.Load().(map[bloomindex.DocID]index.Metric)
+func (ti *Index) Active() *swappableBloom {
+	return ti.active.Load().(*swappableBloom)
 }
 func (ti *Index) MetricMap() map[index.Metric]string {
 	return ti.metricMap.Load().(map[index.Metric]string)
 }
+func (ti *Index) Standby() *swappableBloom {
+	return ti.standby.Load().(*swappableBloom)
+}
 
 func (ti *Index) docsToMetrics(docIDs []bloomindex.DocID) ([]index.Metric, error) {
 	metrics := make([]index.Metric, 0, len(docIDs))
-	docMap := ti.DocumentMap()
+	docMap := ti.Active().docToMetric
 	for _, docID := range docIDs {
 		metric, ok := docMap[docID]
 		if !ok {
