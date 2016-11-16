@@ -24,6 +24,8 @@ type Stats struct {
 	QueriesHandled     *expvar.Int
 	QueryTagsByService *expvar.Map
 
+	Progress *expvar.Map
+
 	ServicesByIndex *expvar.Map
 
 	SplitIndexes *expvar.Map
@@ -47,6 +49,8 @@ func InitStats() *Stats {
 
 		QueriesHandled:     expvar.NewInt("QueriesHandled"),
 		QueryTagsByService: expvar.NewMap("QueryTagsByService"),
+
+		Progress: expvar.NewMap("Progress"),
 
 		SplitIndexes: expvar.NewMap("SplitIndexes"),
 

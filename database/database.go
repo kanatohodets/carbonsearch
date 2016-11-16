@@ -39,6 +39,12 @@ type Database struct {
 	TextIndex *bloom.Index
 }
 
+// TrackPosition allows (kafka) consumers to report their `cur` position in processing to db
+func (db *Database) TrackPosition(topic string, p int32, cur, new int64) {
+	db.stats.Progress.Set(fmt.Sprintf("%s-%d-current", topic, p), util.ExpInt(cur))
+	db.stats.Progress.Set(fmt.Sprintf("%s-%d-newest", topic, p), util.ExpInt(new))
+}
+
 /*
 	Query takes a map like this:
 
