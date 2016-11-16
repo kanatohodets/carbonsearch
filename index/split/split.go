@@ -138,10 +138,11 @@ func (si *Index) Materialize(
 		SortJoins(joinList)
 	}
 
+	totalMetrics := map[index.Metric]struct{}{}
 	joinToMetric := make(map[Join][]index.Metric)
-	var readableMetrics uint32
 	for join, metrics := range joinToMetricBuffer {
 		for metric, _ := range metrics {
+			totalMetrics[metric] = struct{}{}
 			joinToMetric[join] = append(joinToMetric[join], metric)
 		}
 	}
@@ -156,7 +157,7 @@ func (si *Index) Materialize(
 	// update stats
 	si.SetReadableTags(uint32(len(tagToJoin)))
 	si.SetReadableJoins(uint32(len(joinToMetric)))
-	si.SetReadableMetrics(readableMetrics)
+	si.SetReadableMetrics(uint32(len(totalMetrics)))
 	si.IncrementGeneration()
 	g := si.Generation()
 	elapsed := time.Since(start)

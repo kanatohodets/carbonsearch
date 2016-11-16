@@ -332,19 +332,13 @@ func New(
 			db.stats.Uptime.Add(5)
 			for _, si := range db.splitIndexes {
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-generation", si.Name()), util.ExpInt(si.Generation()))
-				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics-readable", si.Name()), util.ExpInt(si.ReadableMetrics()))
-				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics-written", si.Name()), util.ExpInt(si.WrittenMetrics()))
-
-				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags-readable", si.Name()), util.ExpInt(si.ReadableTags()))
-				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags-written", si.Name()), util.ExpInt(si.WrittenTags()))
-
-				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-readable", si.Name()), util.ExpInt(si.ReadableJoins()))
-				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join-written", si.Name()), util.ExpInt(si.WrittenJoins()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", si.Name()), util.ExpInt(si.ReadableMetrics()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags", si.Name()), util.ExpInt(si.ReadableTags()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join", si.Name()), util.ExpInt(si.ReadableJoins()))
 			}
 
 			db.stats.TextIndex.Set("generation", util.ExpInt(db.TextIndex.Generation()))
 			db.stats.TextIndex.Set("metrics-readable", util.ExpInt(db.TextIndex.ReadableMetrics()))
-			db.stats.TextIndex.Set("metrics-written", util.ExpInt(db.TextIndex.WrittenMetrics()))
 		}
 	}()
 	return db
