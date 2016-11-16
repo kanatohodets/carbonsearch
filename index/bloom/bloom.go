@@ -198,8 +198,6 @@ func (ti *Index) ValidateMetrics(metrics []string) []string {
 	for _, metric := range metrics {
 		if len(metric) >= n {
 			validMetrics = append(validMetrics, metric)
-		} else {
-			log.Printf("blargh %q is too short!", metric)
 		}
 	}
 	return validMetrics
