@@ -155,29 +155,6 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 	return metrics, nil
 }
 
-func (ti *Index) AddMetrics(rawMetrics []string, metrics []index.Metric) error {
-	if len(rawMetrics) == 0 {
-		return fmt.Errorf("%s: cannot add 0 metrics to text index", ti.Name())
-	}
-
-	for i, rawMetric := range rawMetrics {
-		metric := metrics[i]
-		tokens, err := tokenize(rawMetric)
-		if err != nil {
-			return fmt.Errorf("%s AddMetrics: can't tokenize %v: %v", ti.Name(), rawMetric, err)
-		}
-
-		ti.mut.Lock()
-		ti.mutableMetrics[metric] = tokens
-		ti.mutableMetricMap[metric] = rawMetric
-		ti.mut.Unlock()
-	}
-
-	writtenMetrics := ti.WrittenMetrics()
-	ti.SetWrittenMetrics(writtenMetrics + uint32(len(rawMetrics)))
-	return nil
-}
-
 //TODO(btyler) synchronize this so it does the heavy lifting first, then waits to do atomic swap
 // alternatively keep a diff
 func (ti *Index) Materialize(rawMetrics []string) error {
@@ -189,9 +166,6 @@ func (ti *Index) Materialize(rawMetrics []string) error {
 	docToMetric := map[bloomindex.DocID]index.Metric{}
 	newMetricMap := map[index.Metric]string{}
 
-	// NOTE(btyler): grouping these into the same lock means we hang on to the
-	// lock a bit longer, but for consistency I think it's best to always have
-	// the same contents in the two
 	for i, rawMetric := range rawMetrics {
 		tokens, err := tokenize(rawMetric)
 		if err != nil {
