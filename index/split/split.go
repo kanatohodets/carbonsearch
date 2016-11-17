@@ -170,9 +170,11 @@ func (si *Index) Query(q *index.Query) ([]index.Metric, error) {
 	joinLists := [][]Join{}
 	for _, tag := range q.Hashed {
 		list, ok := tagToJoin[tag]
-		if ok {
-			joinLists = append(joinLists, list)
+		if !ok {
+			return []index.Metric{}, nil
 		}
+
+		joinLists = append(joinLists, list)
 	}
 
 	// intersect join keys

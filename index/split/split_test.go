@@ -73,6 +73,23 @@ func TestQuery(t *testing.T) {
 	if len(emptyResult) != 0 {
 		t.Errorf("split index test: found some results on a bogus query: %v", emptyResult)
 	}
+
+	emptyResult, err = in.Query(index.NewQuery([]string{"server-state:live", "server-dc:a_ship_in_the_ocean"}))
+	if err != nil {
+		t.Errorf("error querying with missing tag value: %v", err)
+	}
+	if len(emptyResult) != 0 {
+		t.Errorf("split index test: found some results on a partially (bad tag value) bogus query: %v", emptyResult)
+	}
+
+	emptyResult, err = in.Query(index.NewQuery([]string{"server-state:live", "server-foobar:baz"}))
+	if err != nil {
+		t.Errorf("error querying with missing tag key: %v", err)
+	}
+	if len(emptyResult) != 0 {
+		t.Errorf("split index test: found some results on a partially (tag with silly key) bogus query: %v", emptyResult)
+	}
+
 }
 
 func BenchmarkSmallsetQuery(b *testing.B) {

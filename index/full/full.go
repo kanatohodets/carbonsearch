@@ -56,9 +56,14 @@ func (fi *Index) Materialize(fullBuffer map[index.Tag]map[index.Metric]struct{})
 func (fi *Index) Query(q *index.Query) ([]index.Metric, error) {
 	in := fi.Index()
 
-	metricSets := make([][]index.Metric, len(q.Hashed))
-	for pos, tag := range q.Hashed {
-		metricSets[pos] = in[tag]
+	metricSets := make([][]index.Metric, 0, len(q.Hashed))
+	for _, tag := range q.Hashed {
+		metrics, ok := in[tag]
+		if !ok {
+			return []index.Metric{}, nil
+		}
+
+		metricSets = append(metricSets, metrics)
 	}
 
 	return index.IntersectMetrics(metricSets), nil
