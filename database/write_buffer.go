@@ -2,7 +2,6 @@ package database
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/split"
@@ -148,9 +147,5 @@ func (w *writeBuffer) MetricList() []string {
 	for metric, _ := range w.metrics {
 		list = append(list, metric)
 	}
-	// the sort is important so that metrics are added to the two bloom indexes
-	// in the same order each time. otherwise they're no longer in lockstep, and
-	// the active/standby approach breaks down
-	sort.Strings(list)
 	return list
 }
