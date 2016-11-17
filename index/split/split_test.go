@@ -2,6 +2,7 @@ package split
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/kanatohodets/carbonsearch/index"
@@ -52,7 +53,12 @@ func TestQuery(t *testing.T) {
 	tags := []string{"server-state:live", "server-dc:lhr"}
 	query := index.NewQuery([]string{"server-state:live"})
 
-	in.Materialize(prepareBuffer(host, tags, metrics))
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	joinToMetric, tagToJoin := prepareBuffer(host, tags, metrics)
+	in.Materialize(wg, joinToMetric, tagToJoin)
+	wg.Wait()
+
 	result, err := in.Query(query)
 	if err != nil {
 		t.Error(err)
@@ -99,7 +105,11 @@ func BenchmarkSmallsetQuery(b *testing.B) {
 	tags := []string{"server-state:live", "server-dc:lhr"}
 	metrics := []string{metricName}
 
-	in.Materialize(prepareBuffer(host, tags, metrics))
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	joinToMetric, tagToJoin := prepareBuffer(host, tags, metrics)
+	in.Materialize(wg, joinToMetric, tagToJoin)
+	wg.Wait()
 
 	query := index.NewQuery([]string{"server-state:live"})
 	b.ResetTimer()

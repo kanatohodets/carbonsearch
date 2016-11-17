@@ -1,6 +1,7 @@
 package full
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,7 +29,8 @@ func NewIndex() *Index {
 
 // Materialize should panic in case of any problems with the data -- that
 // should have been caught by validation before going into the write buffer
-func (fi *Index) Materialize(fullBuffer map[index.Tag]map[index.Metric]struct{}) {
+func (fi *Index) Materialize(wg *sync.WaitGroup, fullBuffer map[index.Tag]map[index.Metric]struct{}) {
+	defer wg.Done()
 	start := time.Now()
 
 	fullIndex := make(map[index.Tag][]index.Metric)
@@ -49,10 +51,12 @@ func (fi *Index) Materialize(fullBuffer map[index.Tag]map[index.Metric]struct{})
 	// update stats
 	fi.SetReadableTags(readableTags)
 	fi.IncrementGeneration()
+
 	g := fi.Generation()
 	elapsed := time.Since(start)
 	logger.Logf("full index: New generation %v took %v to generate", g, elapsed)
 }
+
 func (fi *Index) Query(q *index.Query) ([]index.Metric, error) {
 	in := fi.Index()
 

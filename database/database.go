@@ -131,17 +131,22 @@ func (db *Database) MaterializeIndexes() {
 	db.writeMut.RLock()
 	defer db.writeMut.RUnlock()
 
-	db.TextIndex.Materialize(db.writeBuffer.MetricList())
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go db.TextIndex.Materialize(wg, db.writeBuffer.MetricList())
 
 	for name, index := range db.splitIndexes {
 		buf, ok := db.writeBuffer.splits[name]
 		if !ok {
 			panic(fmt.Sprintf("there's an index without a matching write buffer. this is an error in the code that initializes the database/split indexes: it must call writeBuffer.AddSplitIndex(%q)", name))
 		}
-		index.Materialize(buf.joinToMetric, buf.tagToJoin)
+		wg.Add(1)
+		go index.Materialize(wg, buf.joinToMetric, buf.tagToJoin)
 	}
 
-	db.FullIndex.Materialize(db.writeBuffer.full)
+	wg.Add(1)
+	go db.FullIndex.Materialize(wg, db.writeBuffer.full)
+	wg.Wait()
 }
 
 // InsertMetrics TODO:...

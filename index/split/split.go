@@ -123,9 +123,11 @@ func NewIndex(joinKey string) *Index {
 // Materialize should panic in case of any problems with the data -- that
 // should have been caught by validation before going into the write buffer
 func (si *Index) Materialize(
+	wg *sync.WaitGroup,
 	joinToMetricBuffer map[Join]map[index.Metric]struct{},
 	tagToJoinBuffer map[tag.ServiceKey]map[Join]index.Tag,
 ) {
+	defer wg.Done()
 	start := time.Now()
 	tagToJoin := make(map[index.Tag][]Join)
 	for _, joinTagPairs := range tagToJoinBuffer {
@@ -159,6 +161,7 @@ func (si *Index) Materialize(
 	si.SetReadableJoins(uint32(len(joinToMetric)))
 	si.SetReadableMetrics(uint32(len(totalMetrics)))
 	si.IncrementGeneration()
+
 	g := si.Generation()
 	elapsed := time.Since(start)
 	logger.Logf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)

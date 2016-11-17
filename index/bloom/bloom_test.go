@@ -1,6 +1,7 @@
 package bloom
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/kanatohodets/carbonsearch/index"
@@ -14,7 +15,10 @@ func TestQuery(t *testing.T) {
 		"monitors.nginx.http.daily",
 	}
 
-	ti.Materialize(metrics)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	ti.Materialize(wg, metrics)
+	wg.Wait()
 
 	q := index.NewQuery([]string{
 		"text-match:nginx",
@@ -48,7 +52,11 @@ func TestQuery(t *testing.T) {
 		"rose.daffodil.cron",
 		"kpopbazz",
 	}
-	in.Materialize(metrics)
+
+	wg = &sync.WaitGroup{}
+	wg.Add(1)
+	in.Materialize(wg, metrics)
+	wg.Wait()
 
 	// bad query
 	query := index.NewQuery([]string{})

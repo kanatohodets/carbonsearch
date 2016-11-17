@@ -1,6 +1,7 @@
 package full
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/kanatohodets/carbonsearch/index"
@@ -24,7 +25,12 @@ func TestQuery(t *testing.T) {
 			tagSet[metric] = struct{}{}
 		}
 	}
-	in.Materialize(buffer)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	in.Materialize(wg, buffer)
+	wg.Wait()
+
 	query := index.NewQuery([]string{"server-state:live"})
 	result, err := in.Query(query)
 	if err != nil {

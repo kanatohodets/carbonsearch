@@ -30,12 +30,6 @@ type Index struct {
 	blockSize int
 	metaSize  int
 
-	// used to 'catch up' the new standby index when it's flipped from active to standby.
-	// this is needed because the 'catch up' goroutine might run longer than
-	// our materialization period, and if we don't protect the bloom index with
-	// a lock it'll race and corrupt itself.
-	catchup sync.Mutex
-
 	// reporting
 	readableMetrics uint32
 	writtenMetrics  uint32
@@ -171,13 +165,11 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 //TODO(btyler) synchronize this so it does the heavy lifting first, then waits to do atomic swap
 // Materialize should panic in case of any problems with the data -- that
 // should have been caught by validation before going into the write buffer
-func (ti *Index) Materialize(rawMetrics []string) {
+func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 	start := time.Now()
+	defer wg.Done()
 
 	hashed := index.HashMetrics(rawMetrics)
-
-	ti.catchup.Lock()
-	defer ti.catchup.Unlock()
 
 	standby := ti.Standby()
 	newMetricMap := map[index.Metric]string{}
@@ -212,20 +204,22 @@ func (ti *Index) Materialize(rawMetrics []string) {
 	ti.standby.Store(active)
 	ti.active.Store(standby)
 
+	wg.Add(1)
 	go func(catchupDocuments []bloomindex.DocID, catchupTokens [][]uint32, catchupMetrics []index.Metric) {
-		ti.catchup.Lock()
-		defer ti.catchup.Unlock()
-		standby := ti.Standby()
+		defer wg.Done()
+		// we can be sure that this is the index we want because of the waitgroup
+		formerlyActive := ti.Standby()
 		for i, docID := range catchupDocuments {
 			// counting on the two bloom indexes increasing document ID in
 			// lockstep with each other. dgryski says this is a reasonable
 			// assumption, and not breaking the encapsulation of the bloom index
 			tokens := catchupTokens[i]
-			standbyDocID := standby.bloom.AddDocument(tokens)
+			standbyDocID := formerlyActive.bloom.AddDocument(tokens)
 			if docID != standbyDocID {
 				panic("bloom index: our bloom indexes have diverged, and are not creating documents in lockstep! yikes!")
 			}
-			standby.docToMetric[standbyDocID] = catchupMetrics[i]
+
+			formerlyActive.docToMetric[standbyDocID] = catchupMetrics[i]
 		}
 	}(recentDocuments, recentTokens, recentMetrics)
 
@@ -233,9 +227,9 @@ func (ti *Index) Materialize(rawMetrics []string) {
 
 	// update stats
 	ti.IncrementGeneration()
+
 	g := ti.Generation()
 	elapsed := time.Since(start)
-
 	log.Printf("text index %s: New generation %v took %v to generate", ti.Name(), g, elapsed)
 }
 
