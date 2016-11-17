@@ -42,9 +42,16 @@ func GetDocumentPositions(size int) []int {
 	return nums
 }
 
-func GetTagCorpus(size int) []string {
+func GetTagCorpus(service string, size int) []string {
 	checkInit()
-	return rwords(size, 15)
+	keys := rwords(size, 12)
+	values := rwords(size, 12)
+
+	res := make([]string, size)
+	for i := 0; i < size; i++ {
+		res[i] = service + "-" + keys[i] + ":" + values[i]
+	}
+	return res
 }
 
 func GetJoinCorpus(size int) []string {

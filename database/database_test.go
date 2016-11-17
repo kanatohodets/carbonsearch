@@ -8,6 +8,7 @@ import (
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/util"
+	"github.com/kanatohodets/carbonsearch/util/test"
 )
 
 var stats *util.Stats
@@ -281,7 +282,15 @@ func TestSplitQuery(t *testing.T) {
 			"fqdn",
 			map[string]map[string][]string{},
 		)
-		splitIndexQueryTests(t, db, fmt.Sprintf("looking for broken ordering in generation %v", i))
+		splitIndexQueryTests(t, db, fmt.Sprintf("looking for broken ordering in empty generation %v", i))
+	}
+
+	for i := 25; i < 40; i++ {
+		populateSplitIndex(t, db, fmt.Sprintf("random generation %v", i),
+			"fqdn",
+			generateRandomSplitSet(10),
+		)
+		splitIndexQueryTests(t, db, fmt.Sprintf("looking for broken ordering in random-addition generation %v", i))
 	}
 
 	//TODO(btyler) regex filter, split index query, intersecting between split and full index, multiple split indexes
@@ -505,4 +514,16 @@ func parseTagsTestCase(t *testing.T, db *Database, testName string, query string
 			return
 		}
 	}
+}
+
+func generateRandomSplitSet(size int) map[string]map[string][]string {
+	res := map[string]map[string][]string{}
+	joins := test.GetJoinCorpus(size)
+	for _, join := range joins {
+		res[join] = map[string][]string{
+			"metrics": test.GetMetricCorpus(10),
+			"tags":    test.GetTagCorpus("servers", 10),
+		}
+	}
+	return res
 }
