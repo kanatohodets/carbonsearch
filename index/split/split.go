@@ -85,8 +85,9 @@ func (a JoinSlice) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a JoinSlice) Less(i, j int) bool { return a[i] < a[j] }
 
 type Index struct {
-	joinKey    string
-	generation uint64
+	joinKey        string
+	generation     uint64
+	generationTime int64 // time.Duration
 
 	tagToJoin    atomic.Value //map[index.Tag][]Join
 	readableTags uint32
@@ -164,6 +165,7 @@ func (si *Index) Materialize(
 
 	g := si.Generation()
 	elapsed := time.Since(start)
+	si.IncreaseGenerationTime(int64(elapsed))
 	logger.Logf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
 }
 

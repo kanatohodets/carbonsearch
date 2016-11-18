@@ -55,12 +55,22 @@ func (si *Index) SetWrittenJoins(new uint32) {
 	_ = atomic.SwapUint32(&si.writtenJoins, new)
 }
 
-// Generation
+// Generation convenience method
 func (si *Index) Generation() uint64 {
 	return atomic.LoadUint64(&si.generation)
 }
 
+// IncrementGeneration incriments the generation number
 func (si *Index) IncrementGeneration() {
-	newGen := uint64(si.Generation() + 1)
-	_ = atomic.SwapUint64(&si.generation, newGen)
+	_ = atomic.AddUint64(&si.generation, 1)
+}
+
+// GenerationTime convenience method
+func (si *Index) GenerationTime() int64 {
+	return atomic.LoadInt64(&si.generationTime)
+}
+
+// IncreaseGenerationTime adds dur to the accumulated generationTime
+func (si *Index) IncreaseGenerationTime(dur int64) {
+	_ = atomic.AddInt64(&si.generationTime, dur)
 }
