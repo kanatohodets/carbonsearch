@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
@@ -422,6 +423,42 @@ func TestTooVagueQuery(t *testing.T) {
 	if err.Error() != "database: query selected 2 metrics, which is over the limit of 1 results in a single query" {
 		t.Errorf("database test: expected an error about metric result set size, got %q instead", err)
 		return
+	}
+}
+
+func TestTableOfContents(t *testing.T) {
+	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
+	// regenerate index adding different stuff
+	populateSplitIndex(t, db, "table of contents",
+		"fqdn",
+		map[string]map[string][]string{
+			"qux-03.prod.example.com": map[string][]string{
+				"metrics": []string{
+					"server.barhost-1000_prod_example_com.tcp.tx_byte",
+				},
+				"tags": []string{
+					"servers-dc:us_west",
+					"servers-status:live",
+				},
+			},
+		},
+	)
+
+	table := db.toc.GetTable()
+	expected := map[string]map[string]map[string]map[string]int{
+		"fqdn": map[string]map[string]map[string]int{
+			"servers": map[string]map[string]int{
+				"dc": map[string]int{
+					"us_west": 1,
+				},
+				"status": map[string]int{
+					"live": 1,
+				},
+			},
+		},
+	}
+	if !reflect.DeepEqual(expected, table) {
+		t.Errorf("table of contents not what was expected. expected %v, got %v", expected, table)
 	}
 }
 

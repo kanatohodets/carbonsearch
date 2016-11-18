@@ -18,13 +18,15 @@ type writeBuffer struct {
 	splits  map[string]splitBuffer
 	//TODO: probably 'full' associations shouldn't be updated? that is, use index.Tag instead of tag.ServiceKey
 	full map[index.Tag]map[index.Metric]struct{}
+	toc  *tableOfContents
 }
 
-func NewWriteBuffer() *writeBuffer {
+func NewWriteBuffer(toc *tableOfContents) *writeBuffer {
 	return &writeBuffer{
 		metrics: map[string]struct{}{},
 		splits:  map[string]splitBuffer{},
 		full:    map[index.Tag]map[index.Metric]struct{}{},
+		toc:     toc,
 	}
 }
 
@@ -62,6 +64,7 @@ func (w *writeBuffer) BufferMetrics(indexName, rawJoin string, rawMetrics []stri
 		joinMetrics[metric] = struct{}{}
 	}
 
+	w.toc.SetMetricCount(indexName, join, len(joinMetrics))
 	return nil
 }
 
@@ -81,7 +84,7 @@ func (w *writeBuffer) BufferTags(indexName, rawJoin string, rawTags []string) er
 	seenServiceKeys := map[tag.ServiceKey]string{}
 
 	for i, rawTag := range rawTags {
-		s, k, _, err := tag.Parse(rawTag)
+		s, k, v, err := tag.Parse(rawTag)
 		if err != nil {
 			return fmt.Errorf("database write buffer: could not add tags to split buffer -- failure to parse tag %q: %v", rawTag, err)
 		}
@@ -106,6 +109,7 @@ func (w *writeBuffer) BufferTags(indexName, rawJoin string, rawTags []string) er
 		// map-set of tag values. for now I think the easiest thing to reason
 		// about is a single value per key.
 		tagValueForJoins[join] = hashedTags[i]
+		w.toc.AddTag(indexName, s, k, v, join)
 	}
 
 	return nil

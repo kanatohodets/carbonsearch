@@ -35,6 +35,8 @@ type Database struct {
 	writeMut    sync.RWMutex
 	writeBuffer *writeBuffer
 
+	toc *tableOfContents
+
 	FullIndex *full.Index
 	TextIndex *bloom.Index
 }
@@ -303,7 +305,9 @@ func New(
 		serviceToIndex[textIndexService] = textIndex
 	}
 
-	writeBuffer := NewWriteBuffer()
+	toc := NewToC()
+
+	writeBuffer := NewWriteBuffer(toc)
 	splitIndexes := map[string]*split.Index{}
 	for joinKey, service := range splitIndexConfig {
 		index := split.NewIndex(joinKey)
@@ -327,6 +331,7 @@ func New(
 		fullIndexService: fullIndexService,
 
 		writeBuffer: writeBuffer,
+		toc:         toc,
 
 		FullIndex: fullIndex,
 		TextIndex: textIndex,
@@ -393,4 +398,8 @@ func (db *Database) ParseQuery(query string) (map[string][]string, error) {
 		tagsByService[service] = append(tagsByService[service], queryTag)
 	}
 	return tagsByService, nil
+}
+
+func (db *Database) TableOfContents() map[string]map[string]map[string]map[string]int {
+	return db.toc.GetTable()
 }

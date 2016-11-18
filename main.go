@@ -340,6 +340,14 @@ func main() {
 
 	go func() {
 		http.HandleFunc("/metrics/find/", findHandler)
+		http.HandleFunc("/toc/", func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			enc := json.NewEncoder(w)
+			err = enc.Encode(db.TableOfContents())
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
 
 		portStr := fmt.Sprintf(":%d", Config.Port)
 		logger.Logln("Starting carbonsearch", BuildVersion)
