@@ -89,7 +89,7 @@ func (w *writeBuffer) BufferTags(indexName, rawJoin string, rawTags []string) er
 
 		oldTag, ok := seenServiceKeys[sk]
 		if ok {
-			return fmt.Errorf("database write buffer: multiple tags (%q and %q) with key %q have been included in a batch for join %q in index %q. This is going to result in unpredictable queries for this join key (last-write-wins behavior). Bailing out on this batch.", s+"-"+k, rawJoin, indexName, rawTag, oldTag)
+			return fmt.Errorf("database write buffer: multiple tags (%q and %q) with key %q have been included in a batch for join %q in index %q. This is going to result in unpredictable queries for this join key (last-write-wins behavior). Bailing out on this batch.", rawTag, oldTag, s+"-"+k, rawJoin, indexName)
 		}
 		seenServiceKeys[sk] = rawTag
 		// 'key' means something like: 'servers-status' in
