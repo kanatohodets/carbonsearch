@@ -279,7 +279,7 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 				return fmt.Errorf("database: service %q is mapped to the %v index, but something is writing to carbonsearch expecting it to be associated with the %q index.", service, mappedIndex.Name(), indexName)
 			}
 		} else {
-			return fmt.Errorf("database: service %q has no mapped index, but something is writing to carbonsearch expecting it to be associated with the %q index. if this assocation is intended, add it to config.yaml", service, indexName)
+			return fmt.Errorf("database: service %q has no mapped index, but something is writing to carbonsearch expecting it to be associated with the %q index. if this assocation is intended, add it to carbonsearch.yaml", service, indexName)
 		}
 	}
 

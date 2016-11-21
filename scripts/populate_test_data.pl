@@ -9,9 +9,9 @@ use Data::Dumper qw(Dumper);
 # bit of a hack, but included in core perl
 use CPAN::Meta::YAML;
 
-my $main_config = read_config("config.yaml");
+my $main_config = read_config("carbonsearch.yaml");
 if (!exists $main_config->{consumers}->{httpapi}) {
-    die "carbonsearch HTTP consumer not enabled. populate_test_data.pl uses the HTTP consumer, so carbonsearch needs to enable it in config.yaml\n"
+    die "carbonsearch HTTP consumer not enabled. populate_test_data.pl uses the HTTP consumer, so carbonsearch needs to enable it in carbonsearch.yaml\n"
 };
 
 my $http_config = read_config("httpapi.yaml");

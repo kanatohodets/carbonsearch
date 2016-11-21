@@ -180,7 +180,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	configPath := flag.String("config", "config.yaml", "Path to the `config file`.")
+	configPath := flag.String("config", "carbonsearch.yaml", "Path to the `config file`.")
 	blockingProfile := flag.String("blockProfile", "", "Path to `block profile output file`. Block profiler disabled if empty.")
 	cpuProfile := flag.String("cpuProfile", "", "Path to `cpu profile output file`. CPU profiler disabled if empty.")
 	virtPrefix = *flag.String("prefix", "virt.v1.", "Query prefix")

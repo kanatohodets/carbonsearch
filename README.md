@@ -33,9 +33,9 @@ Configuration and Running
 -------------------------
 See `*.example.yaml` for complete example configs with comments. Just `cp` to `$config_name.yaml` to use for real.
 
-`config.yaml`
+`carbonsearch.yaml`
 -------------
-Requires `-config` to specify a `config.yaml`, defaults to in the running
+Requires `-config` to specify a `carbonsearch.yaml`, defaults to in the running
 directory.  The `consumers` key specifies which consumers should be started by
 carbonsearch.
 
