@@ -1,18 +1,32 @@
 # where the daemon will serve queries from
 port: 8070
-# the maximum number of metrics that a query can return. if a query selects more metrics, it is an error
-result_limit: 20000
-# the maximum number of tags in a single query
+
+# ----queries----
+# the maximum number of metrics that a query can return. if a query selects
+# more metrics, it is an error. you'll want to tune this number to be
+# reasonable for the serving capacity of your graphite stores, as this is the
+# setting that prevents carbonsearch from asking the zipper to fetch the data
+# for hundreds of thousands of metrics.
+result_limit: 1000
+# the maximum number of tags in a single query:
+# "virt.v1.servers-dc:us_east.servers-num_cpus:8" has 2 tags.
 query_limit: 100
-# how long betwen graphite updates (seconds)
-interval_sec: 10
+
+# ----reporting----
+# how long between graphite updates (seconds) for carbonsearch metrics
+interval_sec: 60
 # how many 100ms buckets to use in graphite metric: carbon.search.{host}.requests_in_0ms_to_100ms, ...
 buckets: 10
-# how often to materialize the 'read' side of the index
-# larger values mean less overall work for the system, at the cost of less
-# up-to-date query results.
-index_rotation_rate: "10s"
-# how to query direct tag<->metric associations (e.g. the 'custom' in 'custom-favorites:btyler')
+
+# ----indexes----
+# how often to materialize the 'read' side of the index. larger values mean
+# less overall work for the system, at the cost of less up-to-date query
+# results.  5-10 seconds is good for development, production values in the 1-5m
+# range are probably reasonable. factors here are: workload (read/write
+# volumes), available CPU on the box running carbon search, and how soon you
+# expect changes to be visible in the search
+index_rotation_rate: "60s"
+# how to query direct associations between tag<->metric (e.g. the 'custom' in 'custom-favorites:btyler')
 full_index_service: "custom"
 # how to query the text index (e.g. the 'text' in 'text-match:foobar')
 text_index_service: "text"
@@ -22,6 +36,7 @@ text_index_service: "text"
 split_indexes:
     fqdn: "servers"
 
+# ----consumers----
 # adding a line to 'consumers' implies that carbonsearch should use this consumer.
 # the value should be the absolute path to the config file for that consumer type
 consumers:

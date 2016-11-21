@@ -11,23 +11,21 @@ It takes a fake 'metric' like:
 and resolves it to a set of metrics, which were previously tagged to match these
 characteristics (right now using AND semantics).
 
-
 Query language
 --------------
 The query language is just a set of AND'd key-value pairs. Each key-value pair
 has a prefix that indicates the data source, like `lb-pool` for load balancer pool, or `discovery-live`
 for service discovery liveness. The token as a whole (`lb-pool:www`) is called a __tag__.
 
-Special data sources
+Text queries
 --------------------
-There's a fake data source called 'text-filter' which can be used as a final filter on
-metric name if the KV queries are returning too many things:
+There's a special "tag" for querying by the text name of the metric: `text-match`.
 
-    virt.v1.text-filter:Delay.lb-pool:db
+    virt.v1.text-match:Delay.lb-pool:db
 
-This will take all metrics tagged with `lb-pool:db` and filter for ones that
-contain `Delay` in the name, so you might end up with a bunch of metrics about replication
-delay in the db pool.
+This will take all metrics tagged with `lb-pool:db` and have 'Delay' in their
+name.  Depending on your data, you might end up with a bunch of metrics about
+replication delay in the db pool.
 
 Configuration and Running
 -------------------------
@@ -111,15 +109,3 @@ on github, for which the author would like to express his gratitude.
 License
 -------
 This code is licensed under the MIT license.
-
-## TODO
-
-1. monitoring/syslogging
-2. simple snapshotting persistence (at least for the 'full' index, often added by humans)
-3. some anti-entropy converging pressure of some kind
-4. add `re-match` based on a proper text index: `re-filter` only narrows down
-   results you have from other sources.
-5. ???
-
-...but it's complete enough to build indexes and serve search queries
-from them.
