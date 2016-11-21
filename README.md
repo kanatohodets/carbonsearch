@@ -1,3 +1,5 @@
+[![Build Status](https://drone.io/github.com/kanatohodets/carbonsearch/status.png)](https://drone.io/github.com/kanatohodets/carbonsearch/latest)
+
 carbonsearch: graphite-shaped search queries
 --------------------------------------------
 
