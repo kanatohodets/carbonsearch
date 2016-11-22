@@ -403,3 +403,9 @@ func (db *Database) ParseQuery(query string) (map[string][]string, error) {
 func (db *Database) TableOfContents() map[string]map[string]map[string]map[string]int {
 	return db.toc.GetTable()
 }
+
+func (db *Database) MetricList() []string {
+	db.writeMut.RLock()
+	defer db.writeMut.RUnlock()
+	return db.writeBuffer.MetricList()
+}
