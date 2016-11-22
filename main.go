@@ -29,6 +29,7 @@ import (
 	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/dgryski/carbonzipper/mstats"
 
+	"github.com/NYTimes/gziphandler"
 	"github.com/gogo/protobuf/proto"
 	"github.com/peterbourgon/g2g"
 )
@@ -340,7 +341,8 @@ func main() {
 
 	go func() {
 		http.HandleFunc("/metrics/find/", findHandler)
-		http.HandleFunc("/toc/", func(w http.ResponseWriter, req *http.Request) {
+
+		http.HandleFunc("/admin/toc/", func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			enc := json.NewEncoder(w)
 			err = enc.Encode(db.TableOfContents())
@@ -352,7 +354,10 @@ func main() {
 		portStr := fmt.Sprintf(":%d", Config.Port)
 		logger.Logln("Starting carbonsearch", BuildVersion)
 		logger.Logf("listening on %s\n", portStr)
-		logger.Logln(http.ListenAndServe(portStr, nil))
+		err := http.ListenAndServe(portStr, gziphandler.GzipHandler(http.DefaultServeMux))
+		if err != nil {
+			logger.Fatalf("failure to start carbonsearch API: %v", err)
+		}
 	}()
 
 	go func() {
