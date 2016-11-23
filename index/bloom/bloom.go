@@ -16,7 +16,7 @@ import (
 const n = 4
 
 type swappableBloom struct {
-	bloom       *bloomindex.Index
+	bloom       *bloomindex.ShardedIndex
 	docToMetric map[bloomindex.DocID]index.Metric
 }
 
@@ -26,9 +26,8 @@ type Index struct {
 
 	metricMap atomic.Value //map[index.Metric]string
 
+	fpRate    float64
 	numHashes int
-	blockSize int
-	metaSize  int
 
 	// reporting
 	readableMetrics uint32
@@ -39,18 +38,17 @@ type Index struct {
 func NewIndex() *Index {
 	ti := Index{
 		//TODO(btyler): configurable?
+		fpRate:    0.01,
 		numHashes: 4,
-		blockSize: 2048,
-		metaSize:  512 * 2048,
 	}
 
 	ti.active.Store(&swappableBloom{
-		bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
+		bloomindex.NewShardedIndex(ti.fpRate, ti.numHashes),
 		map[bloomindex.DocID]index.Metric{},
 	})
 
 	ti.standby.Store(&swappableBloom{
-		bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
+		bloomindex.NewShardedIndex(ti.fpRate, ti.numHashes),
 		map[bloomindex.DocID]index.Metric{},
 	})
 

@@ -1,6 +1,7 @@
 package bloom
 
 import (
+	"log"
 	"sync"
 	"testing"
 
@@ -89,8 +90,8 @@ func searchTest(t *testing.T, testName string, in *Index, searches []string, exp
 		return
 	}
 
-	if len(results) != len(expectedResults) {
-		t.Errorf("%s query %v returned the wrong number of things: expected %v result(s), got %v", testName, query, len(expectedResults), len(results))
+	if len(results) < len(expectedResults) {
+		t.Errorf("%s query %v returned too few things (false negatives). expected %v result(s), got %v", testName, query, len(expectedResults), len(results))
 		return
 	}
 
@@ -102,7 +103,7 @@ func searchTest(t *testing.T, testName string, in *Index, searches []string, exp
 	for _, result := range results {
 		_, ok := expectedSet[result]
 		if !ok {
-			t.Errorf("%s query %v got an unexpected result: %v", testName, query, result)
+			log.Printf("%s query %v got an unexpected result: %v. this is probably ok because we're using a bloom filter, so there are going to be some false positives", testName, query, result)
 			continue
 		}
 		delete(expectedSet, result)
