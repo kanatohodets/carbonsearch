@@ -8,7 +8,7 @@ by attributes _other_ than the metric name.
 
 It takes a fake 'metric' like:
 
-    virt.v1.lb-pool:www.discovery-live:true.server-state:installed
+    virt.v1.*.lb-pool:www.discovery-live:true.server-state:installed
 
 and resolves it to a set of metrics, which were previously tagged to match these
 characteristics (right now using AND semantics).
@@ -23,7 +23,7 @@ Text queries
 --------------------
 There's a special "tag" for querying by the text name of the metric: `text-match`.
 
-    virt.v1.text-match:Delay.lb-pool:db
+    virt.v1.*.text-match:Delay.lb-pool:db
 
 This will take all metrics tagged with `lb-pool:db` and have 'Delay' in their
 name.  Depending on your data, you might end up with a bunch of metrics about

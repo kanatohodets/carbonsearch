@@ -39,11 +39,12 @@ var BuildVersion = "(development build)"
 
 // Config hold configuration variables
 var Config = struct {
-	Buckets     int `yaml:"buckets"`
-	Port        int `yaml:"port"`
-	IntervalSec int `yaml:"interval_sec"`
-	QueryLimit  int `yaml:"query_limit"`
-	ResultLimit int `yaml:"result_limit"`
+	Prefix      string `yaml:"prefix"`
+	Buckets     int    `yaml:"buckets"`
+	Port        int    `yaml:"port"`
+	IntervalSec int    `yaml:"interval_sec"`
+	QueryLimit  int    `yaml:"query_limit"`
+	ResultLimit int    `yaml:"result_limit"`
 
 	IndexRotationRate string            `yaml:"index_rotation_rate"`
 	GraphiteHost      string            `yaml:"graphite_host"`
@@ -184,7 +185,6 @@ func main() {
 	configPath := flag.String("config", "carbonsearch.yaml", "Path to the `config file`.")
 	blockingProfile := flag.String("blockProfile", "", "Path to `block profile output file`. Block profiler disabled if empty.")
 	cpuProfile := flag.String("cpuProfile", "", "Path to `cpu profile output file`. CPU profiler disabled if empty.")
-	virtPrefix = *flag.String("prefix", "virt.v1.", "Query prefix")
 	interval := flag.Duration("i", 0, "interval to report internal statistics to graphite")
 	flag.Parse()
 
@@ -219,6 +219,12 @@ func main() {
 	if *interval == 0 {
 		*interval = time.Duration(Config.IntervalSec) * time.Second
 	}
+
+	if len(Config.Prefix) == 0 {
+		printErrorAndExit(1, "carbonsearch.yaml must define the query prefix (usually something like virt.v1.*.)")
+	}
+
+	virtPrefix = Config.Prefix
 
 	strikes := 0
 	if len(Config.SplitIndexes) == 0 {

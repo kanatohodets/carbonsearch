@@ -1,3 +1,7 @@
+# the special start to a metric that signals that this is a carbonsearch query
+# the * is so that older versions of graphite-web will recognize this as
+# a 'pattern', and thus be allowed to return multiple results
+prefix: "virt.v1.*."
 # where the daemon will serve queries from
 port: 8070
 
