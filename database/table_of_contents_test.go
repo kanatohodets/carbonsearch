@@ -9,6 +9,7 @@ import (
 
 func TestAddTag(t *testing.T) {
 	toc := NewToC()
+	toc.AddSplitEntry("foo-index", "servers")
 	barJoin := split.HashJoin("bar-hostname")
 	toc.AddTag("foo-index", "servers", "dc", "us_west", barJoin)
 	expected := map[string]map[string]map[string]map[string]int{

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/kanatohodets/carbonsearch/index/split"
@@ -15,7 +16,6 @@ type joinEntry struct {
 }
 
 type splitEntry struct {
-	name    string
 	joins   map[split.Join]*joinEntry
 	entries map[serviceT]map[keyT]map[valueT]map[*joinEntry]struct{}
 }
@@ -64,12 +64,7 @@ func (toc *tableOfContents) SetMetricCount(index string, join split.Join, metric
 
 	se, ok := toc.table[index]
 	if !ok {
-		se = &splitEntry{
-			name:    index,
-			joins:   map[split.Join]*joinEntry{},
-			entries: map[serviceT]map[keyT]map[valueT]map[*joinEntry]struct{}{},
-		}
-		toc.table[index] = se
+		panic(fmt.Sprintf("trying to set metric count for an index (%q) the ToC doesn't know about!", index))
 	}
 
 	je, ok := se.joins[join]
@@ -78,6 +73,21 @@ func (toc *tableOfContents) SetMetricCount(index string, join split.Join, metric
 		se.joins[join] = je
 	}
 	je.metricCount = metricCount
+}
+
+func (toc *tableOfContents) AddSplitEntry(index, service string) {
+	toc.mut.Lock()
+	defer toc.mut.Unlock()
+
+	se, ok := toc.table[index]
+	if !ok {
+		se = &splitEntry{
+			joins:   map[split.Join]*joinEntry{},
+			entries: map[serviceT]map[keyT]map[valueT]map[*joinEntry]struct{}{},
+		}
+	}
+	se.entries[serviceT(service)] = map[keyT]map[valueT]map[*joinEntry]struct{}{}
+	toc.table[index] = se
 }
 
 func (toc *tableOfContents) AddTag(index, service, key, value string, join split.Join) {
@@ -90,12 +100,7 @@ func (toc *tableOfContents) AddTag(index, service, key, value string, join split
 
 	se, ok := toc.table[index]
 	if !ok {
-		se = &splitEntry{
-			name:    index,
-			joins:   map[split.Join]*joinEntry{},
-			entries: map[serviceT]map[keyT]map[valueT]map[*joinEntry]struct{}{},
-		}
-		toc.table[index] = se
+		panic(fmt.Sprintf("trying to add a tag to the ToC for an index (%q) the ToC doesn't know about!", index))
 	}
 
 	keys, ok := se.entries[typedService]

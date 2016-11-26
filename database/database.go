@@ -314,6 +314,7 @@ func New(
 		splitIndexes[joinKey] = index
 		serviceToIndex[service] = index
 		err := writeBuffer.AddSplitIndex(joinKey)
+		toc.AddSplitEntry(joinKey, service)
 		if err != nil {
 			panic(fmt.Sprintf("database: %v has already been loaded. This likely means the config file has %v listed multiple times", joinKey, joinKey))
 		}
