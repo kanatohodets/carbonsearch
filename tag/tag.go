@@ -83,3 +83,11 @@ func getPositions(tag string) (int, int, error) {
 
 	return serviceDelimiter, kvMarker, nil
 }
+
+func NeedsKey(partialTag string) bool {
+	return strings.HasSuffix(partialTag, serviceToKey)
+}
+
+func NeedsValue(partialTag string) bool {
+	return strings.HasSuffix(partialTag, keyToValue)
+}

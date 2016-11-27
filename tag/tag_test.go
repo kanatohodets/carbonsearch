@@ -96,3 +96,34 @@ func TestRelaxedParse(t *testing.T) {
 		}
 	}
 }
+
+func TestNeedsKey(t *testing.T) {
+	cases := map[string]bool{
+		"server-state:live": false,
+		"server-state":      false,
+		"server":            false,
+		"server-":           true,
+	}
+	for test, expected := range cases {
+		res := NeedsKey(test)
+		if res != expected {
+			t.Errorf("tag NeedsKey test: %q got %v, expected %v", test, res, expected)
+		}
+	}
+}
+
+func TestNeedsValue(t *testing.T) {
+	cases := map[string]bool{
+		"server":            false,
+		"server-":           false,
+		"server-state":      false,
+		"server-state:":     true,
+		"server-state:live": false,
+	}
+	for test, expected := range cases {
+		res := NeedsValue(test)
+		if res != expected {
+			t.Errorf("tag NeedsValue test: %q got %v, expected %v", test, res, expected)
+		}
+	}
+}
