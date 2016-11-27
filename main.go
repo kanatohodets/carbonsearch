@@ -100,6 +100,26 @@ func bucketRequestTimes(req *http.Request, t time.Duration) {
 	}
 }
 
+// virt.v1.*.serv*
+// -> serv*
+func handleAutocomplete(rawQuery, trimmedQuery string) (pb.GlobResponse, error) {
+	tags := strings.Split(trimmedQuery, ".")
+	completionTag := tags[len(tags)-1]
+	completions := db.Autocomplete(completionTag)
+	var result pb.GlobResponse
+
+	result.Name = &rawQuery
+	result.Matches = make([]*pb.GlobMatch, 0, len(completions))
+	base := fmt.Sprintf("%s%s", virtPrefix, strings.Join(tags[:len(tags)-1], "."))
+	base = strings.TrimSuffix(base, ".")
+	for _, completion := range completions {
+		full := fmt.Sprintf("%s.%s", base, completion)
+		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(full), IsLeaf: proto.Bool(false)})
+	}
+
+	return result, nil
+}
+
 func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, error) {
 	metrics, err := db.Query(query)
 	var result pb.GlobResponse
@@ -151,21 +171,32 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 
 	trimmedQuery := strings.TrimPrefix(rawQuery, virtPrefix)
 
-	queryTags, err := db.ParseQuery(trimmedQuery)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	var result pb.GlobResponse
+	// query = serv*
+	// query = *
+	// query = servers-*
+	// query = servers-stat*
+	// query = servers-status:*
+	// query = servers-status:live.*
+	if strings.HasSuffix(trimmedQuery, "*") {
+		var err error
+		result, err = handleAutocomplete(rawQuery, trimmedQuery)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	} else {
+		queryTags, err := db.ParseQuery(trimmedQuery)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	result, err := handleQuery(rawQuery, queryTags)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		result, err = handleQuery(rawQuery, queryTags)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 
 	if format == "protobuf" {
@@ -175,7 +206,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 	} else if format == "json" {
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
-		err = enc.Encode(result)
+		err := enc.Encode(result)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
