@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgryski/carbonzipper/mlog"
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
+	"github.com/kanatohodets/carbonsearch/database/toc"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/bloom"
 	"github.com/kanatohodets/carbonsearch/index/full"
@@ -36,7 +37,7 @@ type Database struct {
 	writeMut    sync.RWMutex
 	writeBuffer *writeBuffer
 
-	toc *tableOfContents
+	toc *toc.TableOfContents
 
 	FullIndex *full.Index
 	TextIndex *bloom.Index
@@ -306,7 +307,7 @@ func New(
 		serviceToIndex[textIndexService] = textIndex
 	}
 
-	toc := NewToC()
+	toc := toc.NewToC()
 
 	writeBuffer := NewWriteBuffer(toc)
 	splitIndexes := map[string]*split.Index{}

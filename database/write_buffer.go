@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 
+	"github.com/kanatohodets/carbonsearch/database/toc"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/split"
 	"github.com/kanatohodets/carbonsearch/tag"
@@ -18,10 +19,10 @@ type writeBuffer struct {
 	splits  map[string]splitBuffer
 	//TODO: probably 'full' associations shouldn't be updated? that is, use index.Tag instead of tag.ServiceKey
 	full map[index.Tag]map[index.Metric]struct{}
-	toc  *tableOfContents
+	toc  *toc.TableOfContents
 }
 
-func NewWriteBuffer(toc *tableOfContents) *writeBuffer {
+func NewWriteBuffer(toc *toc.TableOfContents) *writeBuffer {
 	return &writeBuffer{
 		metrics: map[string]struct{}{},
 		splits:  map[string]splitBuffer{},

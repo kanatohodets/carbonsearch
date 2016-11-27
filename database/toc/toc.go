@@ -1,4 +1,4 @@
-package database
+package toc
 
 import (
 	"fmt"
@@ -22,19 +22,19 @@ type splitEntry struct {
 }
 
 // this is for humans to look at and figure out what's available for querying
-type tableOfContents struct {
+type TableOfContents struct {
 	mut   sync.RWMutex
 	table map[string]*splitEntry
 }
 
-func NewToC() *tableOfContents {
-	return &tableOfContents{
+func NewToC() *TableOfContents {
+	return &TableOfContents{
 		table: map[string]*splitEntry{},
 	}
 }
 
 //										   index	  service    key        value  # of metrics
-func (toc *tableOfContents) GetTable() map[string]map[string]map[string]map[string]int {
+func (toc *TableOfContents) GetTable() map[string]map[string]map[string]map[string]int {
 	toc.mut.RLock()
 	defer toc.mut.RUnlock()
 
@@ -59,7 +59,7 @@ func (toc *tableOfContents) GetTable() map[string]map[string]map[string]map[stri
 	return res
 }
 
-func (toc *tableOfContents) SetJoinMetricCount(index string, join split.Join, metricCount int) {
+func (toc *TableOfContents) SetJoinMetricCount(index string, join split.Join, metricCount int) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
@@ -76,7 +76,7 @@ func (toc *tableOfContents) SetJoinMetricCount(index string, join split.Join, me
 	counter.count = metricCount
 }
 
-func (toc *tableOfContents) AddSplitEntry(index, service string) {
+func (toc *TableOfContents) AddSplitEntry(index, service string) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
@@ -91,7 +91,7 @@ func (toc *tableOfContents) AddSplitEntry(index, service string) {
 	toc.table[index] = se
 }
 
-func (toc *tableOfContents) AddJoinTag(index, service, key, value string, join split.Join) {
+func (toc *TableOfContents) AddJoinTag(index, service, key, value string, join split.Join) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
@@ -130,7 +130,7 @@ func (toc *tableOfContents) AddJoinTag(index, service, key, value string, join s
 	joinsForValue[counter] = struct{}{}
 }
 
-func (toc *tableOfContents) CompleteKey(index, service, key string) []string {
+func (toc *TableOfContents) CompleteKey(index, service, key string) []string {
 	toc.mut.RLock()
 	defer toc.mut.RUnlock()
 
@@ -150,7 +150,7 @@ func (toc *tableOfContents) CompleteKey(index, service, key string) []string {
 	return results
 }
 
-func (toc *tableOfContents) CompleteValue(index, service, key, value string) []string {
+func (toc *TableOfContents) CompleteValue(index, service, key, value string) []string {
 	toc.mut.RLock()
 	defer toc.mut.RUnlock()
 
@@ -170,7 +170,7 @@ func (toc *tableOfContents) CompleteValue(index, service, key, value string) []s
 	return results
 }
 
-func (toc *tableOfContents) getCompleterKeys(index, service string) map[keyT]map[valueT]map[*metricCounter]struct{} {
+func (toc *TableOfContents) getCompleterKeys(index, service string) map[keyT]map[valueT]map[*metricCounter]struct{} {
 	split, ok := toc.table[index]
 	if !ok {
 		panic(fmt.Sprintf("toc getCompleterKeys was given an index (%q) that it didn't know about. this means that either 1) not enough validation in db.Autocomplete, or 2) the database set of indexes has somehow drifted out of sync with the ones in the ToC, which should be impossible", index))
