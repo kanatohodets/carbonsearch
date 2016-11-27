@@ -12,13 +12,13 @@ type serviceT string
 type keyT string
 type valueT string
 
-type joinEntry struct {
-	metricCount int
+type metricCounter struct {
+	count int
 }
 
 type splitEntry struct {
-	joins   map[split.Join]*joinEntry
-	entries map[serviceT]map[keyT]map[valueT]map[*joinEntry]struct{}
+	joins   map[split.Join]*metricCounter
+	entries map[serviceT]map[keyT]map[valueT]map[*metricCounter]struct{}
 }
 
 // this is for humans to look at and figure out what's available for querying
@@ -47,10 +47,10 @@ func (toc *tableOfContents) GetTable() map[string]map[string]map[string]map[stri
 			for typedKey, valueMap := range keyMap {
 				key := string(typedKey)
 				res[indexName][service][key] = map[string]int{}
-				for typedValue, joinEntryMap := range valueMap {
+				for typedValue, metricCounterMap := range valueMap {
 					value := string(typedValue)
-					for joinEntry, _ := range joinEntryMap {
-						res[indexName][service][key][value] += joinEntry.metricCount
+					for metricCounter, _ := range metricCounterMap {
+						res[indexName][service][key][value] += metricCounter.count
 					}
 				}
 			}
@@ -59,7 +59,7 @@ func (toc *tableOfContents) GetTable() map[string]map[string]map[string]map[stri
 	return res
 }
 
-func (toc *tableOfContents) SetMetricCount(index string, join split.Join, metricCount int) {
+func (toc *tableOfContents) SetJoinMetricCount(index string, join split.Join, metricCount int) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
@@ -68,12 +68,12 @@ func (toc *tableOfContents) SetMetricCount(index string, join split.Join, metric
 		panic(fmt.Sprintf("trying to set metric count for an index (%q) the ToC doesn't know about!", index))
 	}
 
-	je, ok := se.joins[join]
+	counter, ok := se.joins[join]
 	if !ok {
-		je = &joinEntry{}
-		se.joins[join] = je
+		counter = &metricCounter{}
+		se.joins[join] = counter
 	}
-	je.metricCount = metricCount
+	counter.count = metricCount
 }
 
 func (toc *tableOfContents) AddSplitEntry(index, service string) {
@@ -83,15 +83,15 @@ func (toc *tableOfContents) AddSplitEntry(index, service string) {
 	se, ok := toc.table[index]
 	if !ok {
 		se = &splitEntry{
-			joins:   map[split.Join]*joinEntry{},
-			entries: map[serviceT]map[keyT]map[valueT]map[*joinEntry]struct{}{},
+			joins:   map[split.Join]*metricCounter{},
+			entries: map[serviceT]map[keyT]map[valueT]map[*metricCounter]struct{}{},
 		}
 	}
-	se.entries[serviceT(service)] = map[keyT]map[valueT]map[*joinEntry]struct{}{}
+	se.entries[serviceT(service)] = map[keyT]map[valueT]map[*metricCounter]struct{}{}
 	toc.table[index] = se
 }
 
-func (toc *tableOfContents) AddTag(index, service, key, value string, join split.Join) {
+func (toc *tableOfContents) AddJoinTag(index, service, key, value string, join split.Join) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
@@ -106,28 +106,28 @@ func (toc *tableOfContents) AddTag(index, service, key, value string, join split
 
 	keys, ok := se.entries[typedService]
 	if !ok {
-		keys = map[keyT]map[valueT]map[*joinEntry]struct{}{}
+		keys = map[keyT]map[valueT]map[*metricCounter]struct{}{}
 		se.entries[typedService] = keys
 	}
 
 	values, ok := keys[typedKey]
 	if !ok {
-		values = map[valueT]map[*joinEntry]struct{}{}
+		values = map[valueT]map[*metricCounter]struct{}{}
 		keys[typedKey] = values
 	}
 	joinsForValue, ok := values[typedValue]
 	if !ok {
-		joinsForValue = map[*joinEntry]struct{}{}
+		joinsForValue = map[*metricCounter]struct{}{}
 		values[typedValue] = joinsForValue
 	}
 
-	je, ok := se.joins[join]
+	counter, ok := se.joins[join]
 	if !ok {
-		je = &joinEntry{}
-		se.joins[join] = je
+		counter = &metricCounter{}
+		se.joins[join] = counter
 	}
 
-	joinsForValue[je] = struct{}{}
+	joinsForValue[counter] = struct{}{}
 }
 
 func (toc *tableOfContents) CompleteKey(index, service, key string) []string {
@@ -170,7 +170,7 @@ func (toc *tableOfContents) CompleteValue(index, service, key, value string) []s
 	return results
 }
 
-func (toc *tableOfContents) getCompleterKeys(index, service string) map[keyT]map[valueT]map[*joinEntry]struct{} {
+func (toc *tableOfContents) getCompleterKeys(index, service string) map[keyT]map[valueT]map[*metricCounter]struct{} {
 	split, ok := toc.table[index]
 	if !ok {
 		panic(fmt.Sprintf("toc getCompleterKeys was given an index (%q) that it didn't know about. this means that either 1) not enough validation in db.Autocomplete, or 2) the database set of indexes has somehow drifted out of sync with the ones in the ToC, which should be impossible", index))

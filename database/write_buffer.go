@@ -64,7 +64,7 @@ func (w *writeBuffer) BufferMetrics(indexName, rawJoin string, rawMetrics []stri
 		joinMetrics[metric] = struct{}{}
 	}
 
-	w.toc.SetMetricCount(indexName, join, len(joinMetrics))
+	w.toc.SetJoinMetricCount(indexName, join, len(joinMetrics))
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (w *writeBuffer) BufferTags(indexName, rawJoin string, rawTags []string) er
 		// map-set of tag values. for now I think the easiest thing to reason
 		// about is a single value per key.
 		tagValueForJoins[join] = hashedTags[i]
-		w.toc.AddTag(indexName, s, k, v, join)
+		w.toc.AddJoinTag(indexName, s, k, v, join)
 	}
 
 	return nil
