@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/kanatohodets/carbonsearch/index/split"
@@ -127,4 +128,57 @@ func (toc *tableOfContents) AddTag(index, service, key, value string, join split
 	}
 
 	joinsForValue[je] = struct{}{}
+}
+
+func (toc *tableOfContents) CompleteKey(index, service, key string) []string {
+	toc.mut.RLock()
+	defer toc.mut.RUnlock()
+
+	keysForService := toc.getCompleterKeys(index, service)
+	results := []string{}
+	for completeKey, _ := range keysForService {
+		strKey := string(completeKey)
+		// if it turns out that the given key a full key already, we should offer value completions
+		// we'll keep going in case it's also a prefix of something else
+		if strKey == key {
+			valueCompletions := toc.CompleteValue(index, service, key, "")
+			results = append(results, valueCompletions...)
+		} else if strings.HasPrefix(strKey, key) {
+			results = append(results, fmt.Sprintf("%s-%s:", service, strKey))
+		}
+	}
+	return results
+}
+
+func (toc *tableOfContents) CompleteValue(index, service, key, value string) []string {
+	toc.mut.RLock()
+	defer toc.mut.RUnlock()
+
+	keysForService := toc.getCompleterKeys(index, service)
+	valuesForKey, ok := keysForService[keyT(key)]
+	if !ok {
+		return []string{}
+	}
+
+	results := []string{}
+	for completeValue, _ := range valuesForKey {
+		strValue := string(completeValue)
+		if strings.HasPrefix(strValue, value) {
+			results = append(results, fmt.Sprintf("%s-%s:%s", service, key, strValue))
+		}
+	}
+	return results
+}
+
+func (toc *tableOfContents) getCompleterKeys(index, service string) map[keyT]map[valueT]map[*joinEntry]struct{} {
+	split, ok := toc.table[index]
+	if !ok {
+		panic(fmt.Sprintf("toc getCompleterKeys was given an index (%q) that it didn't know about. this means that either 1) not enough validation in db.Autocomplete, or 2) the database set of indexes has somehow drifted out of sync with the ones in the ToC, which should be impossible", index))
+	}
+
+	keysForService, ok := split.entries[serviceT(service)]
+	if !ok {
+		panic(fmt.Sprintf("toc getCompleterKeys was given a service (%q) that the associated index (%q) didn't know about. this means that either 1) not enough validation in db.Autocomplete, or 2) database service to index mapping is wrong somehow", service, index))
+	}
+	return keysForService
 }

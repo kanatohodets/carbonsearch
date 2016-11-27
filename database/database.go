@@ -31,6 +31,7 @@ type Database struct {
 	splitIndexes map[string]*split.Index
 
 	fullIndexService string
+	textIndexService string
 
 	writeMut    sync.RWMutex
 	writeBuffer *writeBuffer
@@ -330,6 +331,7 @@ func New(
 		splitIndexes: splitIndexes,
 
 		fullIndexService: fullIndexService,
+		textIndexService: textIndexService,
 
 		writeBuffer: writeBuffer,
 		toc:         toc,
