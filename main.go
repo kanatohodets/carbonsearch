@@ -290,6 +290,11 @@ func main() {
 		graphite.Register(fmt.Sprintf("carbon.search.%s.text_index.generation_time", hostname), expvar.Func(func() interface{} { return stats.TextIndex.Get("generation-time") }))
 		graphite.Register(fmt.Sprintf("carbon.search.%s.text_index.metrics_readable", hostname), expvar.Func(func() interface{} { return stats.TextIndex.Get("metrics-readable") }))
 
+		// full index metrics
+		graphite.Register(fmt.Sprintf("carbon.search.%s.full_index.generation", hostname), expvar.Func(func() interface{} { return stats.FullIndex.Get("generation") }))
+		graphite.Register(fmt.Sprintf("carbon.search.%s.full_index.generation_time", hostname), expvar.Func(func() interface{} { return stats.FullIndex.Get("generation-time") }))
+		graphite.Register(fmt.Sprintf("carbon.search.%s.full_index.tags_readable", hostname), expvar.Func(func() interface{} { return stats.FullIndex.Get("tags-readable") }))
+
 		// +1 to track every over the number of buckets we track
 		timeBuckets = make([]int64, Config.Buckets+1)
 

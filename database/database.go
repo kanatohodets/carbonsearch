@@ -351,6 +351,10 @@ func New(
 			db.stats.TextIndex.Set("generation", util.ExpInt(db.TextIndex.Generation()))
 			db.stats.TextIndex.Set("generation-time", util.ExpInt(db.TextIndex.GenerationTime()))
 			db.stats.TextIndex.Set("metrics-readable", util.ExpInt(db.TextIndex.ReadableMetrics()))
+
+			db.stats.FullIndex.Set("generation", util.ExpInt(db.FullIndex.Generation()))
+			db.stats.FullIndex.Set("generation-time", util.ExpInt(db.FullIndex.GenerationTime()))
+			db.stats.FullIndex.Set("tags-readable", util.ExpInt(db.FullIndex.ReadableTags()))
 		}
 	}()
 	return db
