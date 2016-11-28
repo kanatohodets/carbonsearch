@@ -342,6 +342,7 @@ func New(
 			db.stats.Uptime.Add(5)
 			for _, si := range db.splitIndexes {
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-generation", si.Name()), util.ExpInt(si.Generation()))
+				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-generation-time", si.Name()), util.ExpInt(si.GenerationTime()))
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-metrics", si.Name()), util.ExpInt(si.ReadableMetrics()))
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-tags", si.Name()), util.ExpInt(si.ReadableTags()))
 				db.stats.SplitIndexes.Set(fmt.Sprintf("%s-join", si.Name()), util.ExpInt(si.ReadableJoins()))
