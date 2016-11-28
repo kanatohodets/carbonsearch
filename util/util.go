@@ -32,6 +32,8 @@ type Stats struct {
 
 	TextIndex *expvar.Map
 
+	FullIndex *expvar.Map
+
 	Uptime *expvar.Int
 }
 
@@ -55,6 +57,8 @@ func InitStats() *Stats {
 		SplitIndexes: expvar.NewMap("SplitIndexes"),
 
 		TextIndex: expvar.NewMap("TextIndex"),
+
+		FullIndex: expvar.NewMap("FullIndex"),
 
 		ServicesByIndex: expvar.NewMap("ServicesByIndex"),
 

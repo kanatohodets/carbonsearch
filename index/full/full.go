@@ -16,8 +16,9 @@ type Index struct {
 	index atomic.Value //map[index.Tag][]index.Metric
 
 	// reporting
-	readableTags uint32
-	generation   uint64
+	readableTags   uint32
+	generation     uint64
+	generationTime int64 // time.Duration
 }
 
 func NewIndex() *Index {
@@ -54,6 +55,7 @@ func (fi *Index) Materialize(wg *sync.WaitGroup, fullBuffer map[index.Tag]map[in
 
 	g := fi.Generation()
 	elapsed := time.Since(start)
+	fi.IncreaseGenerationTime(int64(elapsed))
 	logger.Logf("full index: New generation %v took %v to generate", g, elapsed)
 }
 
