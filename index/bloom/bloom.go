@@ -34,6 +34,7 @@ type Index struct {
 	readableMetrics uint32
 	writtenMetrics  uint32
 	generation      uint64
+	generationTime  int64 // time.Duration
 }
 
 func NewIndex() *Index {
@@ -230,6 +231,7 @@ func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 
 	g := ti.Generation()
 	elapsed := time.Since(start)
+	ti.IncreaseGenerationTime(int64(elapsed))
 	log.Printf("text index %s: New generation %v took %v to generate", ti.Name(), g, elapsed)
 }
 
