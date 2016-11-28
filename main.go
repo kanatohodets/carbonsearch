@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"expvar"
 	"flag"
 	"fmt"
 	"net/http"
@@ -274,6 +275,15 @@ func main() {
 		graphite.Register(fmt.Sprintf("carbon.search.%s.uptime", hostname), stats.Uptime)
 		graphite.Register(fmt.Sprintf("carbon.search.%s.full_tags", hostname), stats.FullIndexTags)
 		graphite.Register(fmt.Sprintf("carbon.search.%s.full_metrics", hostname), stats.FullIndexMetrics)
+
+		// Split index metrics
+		for idx := range Config.SplitIndexes {
+			graphite.Register(fmt.Sprintf("carbon.search.%s.split_index.%s.generation", hostname, idx), expvar.Func(func() interface{} { return stats.SplitIndexes.Get(idx + "-generation") }))
+			graphite.Register(fmt.Sprintf("carbon.search.%s.split_index.%s.generation_time", hostname, idx), expvar.Func(func() interface{} { return stats.SplitIndexes.Get(idx + "-generation-time") }))
+			graphite.Register(fmt.Sprintf("carbon.search.%s.split_index.%s.join", hostname, idx), expvar.Func(func() interface{} { return stats.SplitIndexes.Get(idx + "-join") }))
+			graphite.Register(fmt.Sprintf("carbon.search.%s.split_index.%s.metrics", hostname, idx), expvar.Func(func() interface{} { return stats.SplitIndexes.Get(idx + "-metrics") }))
+			graphite.Register(fmt.Sprintf("carbon.search.%s.split_index.%s.tags", hostname, idx), expvar.Func(func() interface{} { return stats.SplitIndexes.Get(idx + "-tags") }))
+		}
 
 		// +1 to track every over the number of buckets we track
 		timeBuckets = make([]int64, Config.Buckets+1)
