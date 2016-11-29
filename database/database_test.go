@@ -446,6 +446,9 @@ func TestTableOfContents(t *testing.T) {
 
 	table := db.toc.GetTable()
 	expected := map[string]map[string]map[string]map[string]int{
+		"full index": map[string]map[string]map[string]int{
+			"custom": map[string]map[string]int{},
+		},
 		"fqdn": map[string]map[string]map[string]int{
 			"servers": map[string]map[string]int{
 				"dc": map[string]int{

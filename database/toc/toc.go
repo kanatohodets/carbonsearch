@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/split"
 )
 
@@ -12,24 +13,15 @@ type serviceT string
 type keyT string
 type valueT string
 
-type metricCounter struct {
-	count int
-}
-
-type splitEntry struct {
-	joins   map[split.Join]*metricCounter
-	entries map[serviceT]map[keyT]map[valueT]map[*metricCounter]struct{}
-}
-
 // this is for humans to look at and figure out what's available for querying
 type TableOfContents struct {
 	mut   sync.RWMutex
-	table map[string]*splitEntry
+	table map[string]indexEntry
 }
 
 func NewToC() *TableOfContents {
 	return &TableOfContents{
-		table: map[string]*splitEntry{},
+		table: map[string]indexEntry{},
 	}
 }
 
@@ -39,9 +31,9 @@ func (toc *TableOfContents) GetTable() map[string]map[string]map[string]map[stri
 	defer toc.mut.RUnlock()
 
 	res := map[string]map[string]map[string]map[string]int{}
-	for indexName, splitEntry := range toc.table {
+	for indexName, indexEntry := range toc.table {
 		res[indexName] = map[string]map[string]map[string]int{}
-		for typedService, keyMap := range splitEntry.entries {
+		for typedService, keyMap := range indexEntry.getEntries() {
 			service := string(typedService)
 			res[indexName][service] = map[string]map[string]int{}
 			for typedKey, valueMap := range keyMap {
@@ -59,75 +51,58 @@ func (toc *TableOfContents) GetTable() map[string]map[string]map[string]map[stri
 	return res
 }
 
-func (toc *TableOfContents) SetJoinMetricCount(index string, join split.Join, metricCount int) {
+func (toc *TableOfContents) AddTag(indexName string, service, key, value string, hash uint64) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
-	se, ok := toc.table[index]
+	ie, ok := toc.table[indexName]
+	if !ok {
+		panic(fmt.Sprintf("trying to add a tag for an index (%q) the ToC doesn't know about!", indexName))
+	}
+
+	ie.AddTag(hash, service, key, value)
+}
+
+func (toc *TableOfContents) SetMetricCount(index string, hash uint64, metricCount int) {
+	toc.mut.Lock()
+	defer toc.mut.Unlock()
+
+	ie, ok := toc.table[index]
 	if !ok {
 		panic(fmt.Sprintf("trying to set metric count for an index (%q) the ToC doesn't know about!", index))
 	}
 
-	counter, ok := se.joins[join]
-	if !ok {
-		counter = &metricCounter{}
-		se.joins[join] = counter
-	}
-	counter.count = metricCount
+	ie.SetMetricCount(hash, metricCount)
 }
 
-func (toc *TableOfContents) AddSplitEntry(index, service string) {
+func (toc *TableOfContents) AddIndexServiceEntry(indexType, indexName, service string) {
 	toc.mut.Lock()
 	defer toc.mut.Unlock()
 
-	se, ok := toc.table[index]
+	ie, ok := toc.table[indexName]
 	if !ok {
-		se = &splitEntry{
-			joins:   map[split.Join]*metricCounter{},
-			entries: map[serviceT]map[keyT]map[valueT]map[*metricCounter]struct{}{},
+		// no sense having any text entries in the ToC
+		if indexType == "text" {
+			return
 		}
+
+		if indexType == "split" {
+			ie = &splitEntry{
+				joins:   map[split.Join]*metricCounter{},
+				entries: tagTable{},
+			}
+		} else if indexType == "full" {
+			ie = &fullEntry{
+				tags:    map[index.Tag]*metricCounter{},
+				entries: tagTable{},
+			}
+		}
+		toc.table[indexName] = ie
 	}
-	se.entries[serviceT(service)] = map[keyT]map[valueT]map[*metricCounter]struct{}{}
-	toc.table[index] = se
-}
-
-func (toc *TableOfContents) AddJoinTag(index, service, key, value string, join split.Join) {
-	toc.mut.Lock()
-	defer toc.mut.Unlock()
-
-	typedService := serviceT(service)
-	typedKey := keyT(key)
-	typedValue := valueT(value)
-
-	se, ok := toc.table[index]
-	if !ok {
-		panic(fmt.Sprintf("trying to add a tag to the ToC for an index (%q) the ToC doesn't know about!", index))
+	err := ie.AddService(service)
+	if err != nil {
+		panic(fmt.Sprintf("could not register %v to split entry for index %v: %v", service, indexName, err))
 	}
-
-	keys, ok := se.entries[typedService]
-	if !ok {
-		keys = map[keyT]map[valueT]map[*metricCounter]struct{}{}
-		se.entries[typedService] = keys
-	}
-
-	values, ok := keys[typedKey]
-	if !ok {
-		values = map[valueT]map[*metricCounter]struct{}{}
-		keys[typedKey] = values
-	}
-	joinsForValue, ok := values[typedValue]
-	if !ok {
-		joinsForValue = map[*metricCounter]struct{}{}
-		values[typedValue] = joinsForValue
-	}
-
-	counter, ok := se.joins[join]
-	if !ok {
-		counter = &metricCounter{}
-		se.joins[join] = counter
-	}
-
-	joinsForValue[counter] = struct{}{}
 }
 
 func (toc *TableOfContents) CompleteKey(index, service, key string) []string {
@@ -171,12 +146,14 @@ func (toc *TableOfContents) CompleteValue(index, service, key, value string) []s
 }
 
 func (toc *TableOfContents) getCompleterKeys(index, service string) map[keyT]map[valueT]map[*metricCounter]struct{} {
-	split, ok := toc.table[index]
+	ie, ok := toc.table[index]
 	if !ok {
 		panic(fmt.Sprintf("toc getCompleterKeys was given an index (%q) that it didn't know about. this means that either 1) not enough validation in db.Autocomplete, or 2) the database set of indexes has somehow drifted out of sync with the ones in the ToC, which should be impossible", index))
 	}
 
-	keysForService, ok := split.entries[serviceT(service)]
+	entries := ie.getEntries()
+
+	keysForService, ok := entries[serviceT(service)]
 	if !ok {
 		panic(fmt.Sprintf("toc getCompleterKeys was given a service (%q) that the associated index (%q) didn't know about. this means that either 1) not enough validation in db.Autocomplete, or 2) database service to index mapping is wrong somehow", service, index))
 	}

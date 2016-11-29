@@ -18,16 +18,18 @@ type writeBuffer struct {
 	metrics map[string]struct{} //TODO: time.Time so things can expire out after some duration
 	splits  map[string]splitBuffer
 	//TODO: probably 'full' associations shouldn't be updated? that is, use index.Tag instead of tag.ServiceKey
-	full map[index.Tag]map[index.Metric]struct{}
-	toc  *toc.TableOfContents
+	full          map[index.Tag]map[index.Metric]struct{}
+	fullIndexName string
+	toc           *toc.TableOfContents
 }
 
-func NewWriteBuffer(toc *toc.TableOfContents) *writeBuffer {
+func NewWriteBuffer(fullIndexName string, toc *toc.TableOfContents) *writeBuffer {
 	return &writeBuffer{
-		metrics: map[string]struct{}{},
-		splits:  map[string]splitBuffer{},
-		full:    map[index.Tag]map[index.Metric]struct{}{},
-		toc:     toc,
+		metrics:       map[string]struct{}{},
+		splits:        map[string]splitBuffer{},
+		full:          map[index.Tag]map[index.Metric]struct{}{},
+		fullIndexName: fullIndexName,
+		toc:           toc,
 	}
 }
 
@@ -65,7 +67,7 @@ func (w *writeBuffer) BufferMetrics(indexName, rawJoin string, rawMetrics []stri
 		joinMetrics[metric] = struct{}{}
 	}
 
-	w.toc.SetJoinMetricCount(indexName, join, len(joinMetrics))
+	w.toc.SetMetricCount(indexName, uint64(join), len(joinMetrics))
 	return nil
 }
 
@@ -110,7 +112,7 @@ func (w *writeBuffer) BufferTags(indexName, rawJoin string, rawTags []string) er
 		// map-set of tag values. for now I think the easiest thing to reason
 		// about is a single value per key.
 		tagValueForJoins[join] = hashedTags[i]
-		w.toc.AddJoinTag(indexName, s, k, v, join)
+		w.toc.AddTag(indexName, s, k, v, uint64(join))
 	}
 
 	return nil
@@ -132,16 +134,23 @@ func (w *writeBuffer) BufferCustom(rawTags []string, rawMetrics []string) error 
 		w.metrics[metric] = struct{}{}
 	}
 
-	for _, tag := range tags {
-		metricSet, ok := w.full[tag]
+	for i, hashedTag := range tags {
+		metricSet, ok := w.full[hashedTag]
 		if !ok {
 			metricSet = map[index.Metric]struct{}{}
-			w.full[tag] = metricSet
+			w.full[hashedTag] = metricSet
 		}
 
 		for _, metric := range metrics {
-			w.full[tag][metric] = struct{}{}
+			w.full[hashedTag][metric] = struct{}{}
 		}
+
+		s, k, v, err := tag.Parse(rawTags[i])
+		if err != nil {
+			return fmt.Errorf("failure to add %v to full index buffer: parse error: %v", rawTags[i], err)
+		}
+		w.toc.AddTag(w.fullIndexName, s, k, v, uint64(hashedTag))
+		w.toc.SetMetricCount(w.fullIndexName, uint64(hashedTag), len(w.full[hashedTag]))
 	}
 
 	return nil

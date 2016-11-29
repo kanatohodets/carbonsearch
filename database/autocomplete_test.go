@@ -3,10 +3,17 @@ package database
 import (
 	"fmt"
 	"testing"
+
+	"github.com/kanatohodets/carbonsearch/consumer/message"
 )
 
 func initAutocompleteTest(t *testing.T) *Database {
 	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
+
+	db.InsertCustom(&message.TagMetric{
+		Tags:    []string{"custom-favorites:jdoe", "custom-mood:delighted"},
+		Metrics: []string{"unused_in_this_test"},
+	})
 
 	populateSplitIndex(t, db, "basic autocomplete queries",
 		"fqdn",
@@ -50,6 +57,7 @@ func initAutocompleteTest(t *testing.T) *Database {
 func TestServiceAutocomplete(t *testing.T) {
 	db := initAutocompleteTest(t)
 	autocompleteTestCase(t, db, "basic service completion", "ser*", []string{"servers-"})
+	autocompleteTestCase(t, db, "basic service completion, full index", "cust*", []string{"custom-"})
 	autocompleteTestCase(t, db, "no such service (or service prefix)", "foo_service*", []string{})
 	autocompleteTestCase(t, db, "no service specified", "*", []string{"servers-", fmt.Sprintf("%s-", fullService), fmt.Sprintf("%s-", textService)})
 
@@ -60,6 +68,11 @@ func TestServiceAutocomplete(t *testing.T) {
 		"servers-statistically_interesting:",
 		"servers-roles:",
 	})
+	autocompleteTestCase(t, db, "service fully specified, full index", "custom*", []string{
+		"custom-favorites:",
+		"custom-mood:",
+	})
+
 	autocompleteTestCase(t, db, "service fully specified with trailing dash", "servers-*", []string{
 		"servers-hw:",
 		"servers-dc:",
@@ -67,6 +80,11 @@ func TestServiceAutocomplete(t *testing.T) {
 		"servers-statistically_interesting:",
 		"servers-roles:",
 	})
+	autocompleteTestCase(t, db, "service fully specified with trailing dash, full index", "custom-*", []string{
+		"custom-favorites:",
+		"custom-mood:",
+	})
+
 }
 
 func TestKeyAutocomplete(t *testing.T) {
@@ -74,6 +92,10 @@ func TestKeyAutocomplete(t *testing.T) {
 	autocompleteTestCase(t, db, "partial key, one result", "servers-statu*", []string{
 		"servers-status:",
 	})
+	autocompleteTestCase(t, db, "partial key, one result, full index", "custom-fav*", []string{
+		"custom-favorites:",
+	})
+
 	autocompleteTestCase(t, db, "partial key, two results", "servers-stat*", []string{
 		"servers-status:",
 		"servers-statistically_interesting:",
@@ -83,10 +105,19 @@ func TestKeyAutocomplete(t *testing.T) {
 		"servers-status:live",
 		"servers-status:borked",
 	})
+	autocompleteTestCase(t, db, "key fully specified, full index", "custom-favorites*", []string{
+		"custom-favorites:jdoe",
+	})
+
 	autocompleteTestCase(t, db, "key fully specified with trailing colon", "servers-status:*", []string{
 		"servers-status:live",
 		"servers-status:borked",
 	})
+
+	autocompleteTestCase(t, db, "key fully specified with trailing colon, full index", "custom-favorites:*", []string{
+		"custom-favorites:jdoe",
+	})
+
 	//autocompleteTestCase(t, db, "key fully specified, but it's a bad one", "servers-blorg*", []string{})
 }
 
@@ -95,6 +126,11 @@ func TestValueAutocomplete(t *testing.T) {
 	autocompleteTestCase(t, db, "value partially specified", "servers-status:bo*", []string{
 		"servers-status:borked",
 	})
+
+	autocompleteTestCase(t, db, "value partially specified, full index", "custom-mood:del*", []string{
+		"custom-mood:delighted",
+	})
+
 }
 
 func TestTextAutocomplete(t *testing.T) {

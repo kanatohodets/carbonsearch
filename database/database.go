@@ -297,9 +297,12 @@ func New(
 ) *Database {
 	serviceToIndex := make(map[string]index.Index)
 
+	toc := toc.NewToC()
+
 	fullIndex := full.NewIndex()
 	if fullIndexService != "" {
 		serviceToIndex[fullIndexService] = fullIndex
+		toc.AddIndexServiceEntry("full", fullIndex.Name(), fullIndexService)
 	}
 
 	textIndex := bloom.NewIndex()
@@ -307,16 +310,14 @@ func New(
 		serviceToIndex[textIndexService] = textIndex
 	}
 
-	toc := toc.NewToC()
-
-	writeBuffer := NewWriteBuffer(toc)
+	writeBuffer := NewWriteBuffer(fullIndex.Name(), toc)
 	splitIndexes := map[string]*split.Index{}
 	for joinKey, service := range splitIndexConfig {
 		index := split.NewIndex(joinKey)
 		splitIndexes[joinKey] = index
 		serviceToIndex[service] = index
 		err := writeBuffer.AddSplitIndex(joinKey)
-		toc.AddSplitEntry(joinKey, service)
+		toc.AddIndexServiceEntry("split", joinKey, service)
 		if err != nil {
 			panic(fmt.Sprintf("database: %v has already been loaded. This likely means the config file has %v listed multiple times", joinKey, joinKey))
 		}
