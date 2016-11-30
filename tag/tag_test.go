@@ -50,6 +50,22 @@ func TestParse(t *testing.T) {
 			t.Errorf("tag test: %q failed to error while parsing. tokens: %q %q %q", invalid, service, k, v)
 		}
 	}
+
+	errorCases := map[string]string{
+		"foobar":        "tag: \"foobar\" is an invalid tag, should be: service-key:value",
+		"servers-cpus8": "tag: \"servers-cpus8\" is an invalid tag, should be: service-key:value",
+	}
+
+	for badTag, expectedError := range errorCases {
+		_, _, _, err := Parse(badTag)
+		if err == nil {
+			t.Errorf("tag test: %q (a deliberately bad tag) failed to error while parsing")
+		}
+
+		if err.Error() != expectedError {
+			t.Errorf("tag test: parsing %q did not yield the expected error. got: %q. expected %q", badTag, err.Error(), expectedError)
+		}
+	}
 }
 
 func TestRelaxedParse(t *testing.T) {
