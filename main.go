@@ -256,6 +256,10 @@ func main() {
 		printErrorAndExit(1, "carbonsearch.yaml must define the query prefix (usually something like virt.v1.*.)")
 	}
 
+	if !strings.HasSuffix(Config.Prefix, ".") {
+		printErrorAndExit(1, "config error: 'prefix' must terminate with '.'. The current value is: %q", Config.Prefix)
+	}
+
 	virtPrefix = Config.Prefix
 
 	strikes := 0
