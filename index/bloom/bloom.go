@@ -16,6 +16,7 @@ import (
 const n = 4
 
 type swappableBloom struct {
+	mut         sync.RWMutex
 	bloom       *bloomindex.Index
 	docToMetric map[bloomindex.DocID]index.Metric
 }
@@ -46,13 +47,13 @@ func NewIndex() *Index {
 	}
 
 	ti.active.Store(&swappableBloom{
-		bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
-		map[bloomindex.DocID]index.Metric{},
+		bloom:       bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
+		docToMetric: map[bloomindex.DocID]index.Metric{},
 	})
 
 	ti.standby.Store(&swappableBloom{
-		bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
-		map[bloomindex.DocID]index.Metric{},
+		bloom:       bloomindex.NewIndex(ti.blockSize, ti.metaSize, ti.numHashes),
+		docToMetric: map[bloomindex.DocID]index.Metric{},
 	})
 
 	ti.metricMap.Store(map[index.Metric]string{})
@@ -148,9 +149,13 @@ func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 		tokens = append(tokens, searchTrigrams...)
 	}
 
-	docIDs := ti.Active().bloom.Query(tokens)
+	active := ti.Active()
+	active.mut.RLock()
+	defer active.mut.RUnlock()
 
-	metrics, err := ti.docsToMetrics(docIDs)
+	docIDs := active.bloom.Query(tokens)
+
+	metrics, err := ti.docsToMetrics(active, docIDs)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"%v Query: error unmapping doc IDs: %v",
@@ -180,6 +185,8 @@ func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 	recentDocuments := []bloomindex.DocID{}
 	recentTokens := [][]uint32{}
 	recentMetrics := []index.Metric{}
+
+	standby.mut.Lock()
 	for i, rawMetric := range rawMetrics {
 		metric := hashed[i]
 		_, ok := oldMetricMap[metric]
@@ -197,6 +204,7 @@ func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 		}
 		newMetricMap[metric] = rawMetric
 	}
+	standby.mut.Unlock()
 
 	ti.SetReadableMetrics(uint32(len(standby.docToMetric)))
 
@@ -210,6 +218,7 @@ func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 		defer wg.Done()
 		// we can be sure that this is the index we want because of the waitgroup
 		formerlyActive := ti.Standby()
+		formerlyActive.mut.Lock()
 		for i, docID := range catchupDocuments {
 			// counting on the two bloom indexes increasing document ID in
 			// lockstep with each other. dgryski says this is a reasonable
@@ -222,6 +231,7 @@ func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 
 			formerlyActive.docToMetric[standbyDocID] = catchupMetrics[i]
 		}
+		formerlyActive.mut.Unlock()
 	}(recentDocuments, recentTokens, recentMetrics)
 
 	ti.metricMap.Store(newMetricMap)
@@ -271,9 +281,10 @@ func (ti *Index) Standby() *swappableBloom {
 	return ti.standby.Load().(*swappableBloom)
 }
 
-func (ti *Index) docsToMetrics(docIDs []bloomindex.DocID) ([]index.Metric, error) {
+func (ti *Index) docsToMetrics(active *swappableBloom, docIDs []bloomindex.DocID) ([]index.Metric, error) {
 	metrics := make([]index.Metric, 0, len(docIDs))
-	docMap := ti.Active().docToMetric
+
+	docMap := active.docToMetric
 	for _, docID := range docIDs {
 		metric, ok := docMap[docID]
 		if !ok {
