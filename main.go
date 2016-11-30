@@ -114,7 +114,7 @@ func handleAutocomplete(rawQuery, trimmedQuery string) (pb.GlobResponse, error) 
 	base = strings.TrimSuffix(base, ".")
 	for _, completion := range completions {
 		full := fmt.Sprintf("%s.%s", base, completion)
-		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(full), IsLeaf: proto.Bool(false)})
+		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(full), IsLeaf: proto.Bool(true)})
 	}
 
 	return result, nil
