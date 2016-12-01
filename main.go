@@ -30,6 +30,7 @@ import (
 	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
 	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/dgryski/carbonzipper/mstats"
+	"github.com/dgryski/httputil"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/gogo/protobuf/proto"
@@ -401,29 +402,30 @@ func main() {
 		}
 	}()
 
+	httputil.PublishTrackedConnections("httptrack")
 	expvar.Publish("requestBuckets", expvar.Func(renderTimeBuckets))
 	expvar.Publish("Config", expvar.Func(func() interface{} { return Config }))
 
 	go func() {
-		http.HandleFunc("/metrics/find/", findHandler)
+		http.HandleFunc("/metrics/find/", httputil.TrackConnections(httputil.TimeHandler(findHandler, bucketRequestTimes)))
 
-		http.HandleFunc("/admin/toc/", func(w http.ResponseWriter, req *http.Request) {
+		http.HandleFunc("/admin/toc/", httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			enc := json.NewEncoder(w)
 			err = enc.Encode(db.TableOfContents())
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-		})
+		}, bucketRequestTimes)))
 
-		http.HandleFunc("/admin/metric_list/", func(w http.ResponseWriter, req *http.Request) {
+		http.HandleFunc("/admin/metric_list/", httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			enc := json.NewEncoder(w)
 			err = enc.Encode(db.MetricList())
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-		})
+		}, bucketRequestTimes)))
 
 		portStr := fmt.Sprintf(":%d", Config.Port)
 		logger.Logln("Starting carbonsearch", BuildVersion)
