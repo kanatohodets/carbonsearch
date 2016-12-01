@@ -204,7 +204,10 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 	if format == "protobuf" {
 		w.Header().Set("Content-Type", "application/x-protobuf")
 		b, _ := result.Marshal()
-		w.Write(b)
+		_, err := w.Write(b)
+		if err != nil {
+			logger.Logf("error writing protobuf response body %q", err)
+		}
 	} else if format == "json" {
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
