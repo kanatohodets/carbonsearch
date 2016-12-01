@@ -135,10 +135,9 @@ func (w *writeBuffer) BufferCustom(rawTags []string, rawMetrics []string) error 
 	}
 
 	for i, hashedTag := range tags {
-		metricSet, ok := w.full[hashedTag]
+		_, ok := w.full[hashedTag]
 		if !ok {
-			metricSet = map[index.Metric]struct{}{}
-			w.full[hashedTag] = metricSet
+			w.full[hashedTag] = map[index.Metric]struct{}{}
 		}
 
 		for _, metric := range metrics {

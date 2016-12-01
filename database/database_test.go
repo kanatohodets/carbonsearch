@@ -168,6 +168,10 @@ func queryTest(t *testing.T, db *Database, testName string, query string, expect
 	}
 
 	result, err := db.Query(parsedQuery)
+	if err != nil {
+		t.Errorf("error during testing in db.Query: %v", err)
+		return
+	}
 
 	resultSet := map[string]bool{}
 	for _, metric := range result {
