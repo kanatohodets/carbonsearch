@@ -157,7 +157,7 @@ func (w *writeBuffer) BufferCustom(rawTags []string, rawMetrics []string) error 
 
 func (w *writeBuffer) MetricList() []string {
 	list := make([]string, 0, len(w.metrics))
-	for metric, _ := range w.metrics {
+	for metric := range w.metrics {
 		list = append(list, metric)
 	}
 	return list
