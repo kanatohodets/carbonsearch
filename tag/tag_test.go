@@ -59,7 +59,7 @@ func TestParse(t *testing.T) {
 	for badTag, expectedError := range errorCases {
 		_, _, _, err := Parse(badTag)
 		if err == nil {
-			t.Errorf("tag test: %q (a deliberately bad tag) failed to error while parsing")
+			t.Errorf("tag test: %q (a deliberately bad tag) failed to error while parsing", badTag)
 		}
 
 		if err.Error() != expectedError {
