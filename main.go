@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/kanatohodets/carbonsearch/consumer"
@@ -432,7 +433,7 @@ func main() {
 
 	go func() {
 		signals := make(chan os.Signal, 1)
-		signal.Notify(signals, os.Kill, os.Interrupt)
+		signal.Notify(signals, syscall.SIGTERM, os.Interrupt)
 		<-signals
 		logger.Logln("Shutting down...")
 		for _, consumer := range consumers {
