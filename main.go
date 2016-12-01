@@ -401,6 +401,9 @@ func main() {
 		}
 	}()
 
+	expvar.Publish("requestBuckets", expvar.Func(renderTimeBuckets))
+	expvar.Publish("Config", expvar.Func(func() interface{} { return Config }))
+
 	go func() {
 		http.HandleFunc("/metrics/find/", findHandler)
 
