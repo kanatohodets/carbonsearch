@@ -15,13 +15,17 @@ import (
 
 var logger mlog.Level
 
-type KafkaConfig struct {
+// Config holds the contents of kafka.yaml
+type Config struct {
 	Offset       string            `yaml:"offset"`
 	BrokerList   []string          `yaml:"broker_list"`
 	TopicMapping map[string]string `yaml:"topic_mapping"`
 }
 
-type KafkaConsumer struct {
+// Consumer represents a carbonsearch kafka data source: it subscribes to a set
+// of topics in kafka, and uses the messages from those topics to populate the
+// carbonsearch Database.
+type Consumer struct {
 	initialOffset     int64
 	consumer          sarama.Consumer
 	partitionsByTopic map[string][]int32
@@ -29,8 +33,9 @@ type KafkaConsumer struct {
 	shutdown          chan bool
 }
 
-func New(configPath string) (*KafkaConsumer, error) {
-	config := &KafkaConfig{}
+// New reads the kafka consumer config at the given path, and returns an initialized consumer, ready to Start.
+func New(configPath string) (*Consumer, error) {
+	config := &Config{}
 	err := util.ReadConfig(configPath, config)
 	if err != nil {
 		return nil, err
@@ -61,7 +66,7 @@ func New(configPath string) (*KafkaConsumer, error) {
 		partitionsByTopic[topic] = partitionList
 	}
 
-	return &KafkaConsumer{
+	return &Consumer{
 		initialOffset:     initialOffset,
 		consumer:          c,
 		partitionsByTopic: partitionsByTopic,
@@ -70,7 +75,8 @@ func New(configPath string) (*KafkaConsumer, error) {
 	}, nil
 }
 
-func (k *KafkaConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
+// Start begins reading from the configured kafka topics, inserting messages into Database as they're consumed.
+func (k *Consumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 	for topic, partitionList := range k.partitionsByTopic {
 		for _, partition := range partitionList {
 			pc, err := k.consumer.ConsumePartition(topic, partition, k.initialOffset)
@@ -84,7 +90,10 @@ func (k *KafkaConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 				defer wg.Done()
 				<-k.shutdown
 				//TODO(btyler) AsyncClose and wait on pc.Messages/pc.Errors?
-				pc.Close()
+				err := pc.Close()
+				if err != nil {
+					logger.Logf("kafka consumer: Failed to close partition %v: %v", partition, err)
+				}
 			}(pc)
 
 			switch k.topicMapping[topic] {
@@ -95,22 +104,21 @@ func (k *KafkaConsumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 			case "custom":
 				go readCustom(pc, db)
 			default:
-				panic(fmt.Sprintf("what are you even doing? there's no topic mapping for %s in the config file", topic))
+				panic(fmt.Sprintf("There's no topic mapping for %s in the kafka consumer config file. Topic mappings can be 'metric', 'tag', or 'custom'", topic))
 			}
 		}
 	}
 	return nil
 }
 
-func (k *KafkaConsumer) Stop() error {
+// Stop halts the consumer. Note: calling Stop and then later calling Start on the same consumer is undefined.
+func (k *Consumer) Stop() error {
 	close(k.shutdown)
-	if err := k.consumer.Close(); err != nil {
-		return err
-	}
-	return nil
+	return k.consumer.Close()
 }
 
-func (k *KafkaConsumer) Name() string {
+// Name returns the name of the consumer
+func (k *Consumer) Name() string {
 	return "kafka"
 }
 

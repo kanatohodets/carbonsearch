@@ -5,4 +5,4 @@ import (
 )
 
 // make sure that it implements the Consumer interface
-var _ c.Consumer = &KafkaConsumer{}
+var _ c.Consumer = &Consumer{}
