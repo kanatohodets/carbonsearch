@@ -84,10 +84,14 @@ func getPositions(tag string) (int, int, error) {
 	return serviceDelimiter, kvMarker, nil
 }
 
+// NeedsKey returns true if the tag appears to lack the 'key' portion, as in: servers-
 func NeedsKey(partialTag string) bool {
-	return strings.HasSuffix(partialTag, serviceToKey)
+	firstServiceToKey := strings.Index(partialTag, serviceToKey)
+	return firstServiceToKey == len(partialTag)-1
 }
 
+// NeedsValue returns true if the tag appears to lack the 'value' portion, as in: servers-dc:
 func NeedsValue(partialTag string) bool {
-	return strings.HasSuffix(partialTag, keyToValue)
+	firstKeyToValue := strings.Index(partialTag, keyToValue)
+	return firstKeyToValue == len(partialTag)-1
 }

@@ -24,7 +24,7 @@ func initAutocompleteTest(t *testing.T) *Database {
 				},
 				"tags": []string{
 					"servers-hw:shiny",
-					"servers-dc:us_west",
+					"servers-dc:us-west",
 					"servers-status:live",
 					"servers-statistically_interesting:yes",
 					"servers-roles:foo",
@@ -44,7 +44,7 @@ func initAutocompleteTest(t *testing.T) *Database {
 				},
 				"tags": []string{
 					"servers-hw:rusty",
-					"servers-dc:us_east",
+					"servers-dc:us-east",
 					"servers-status:borked",
 					"servers-roles:qux",
 				},
@@ -129,6 +129,11 @@ func TestValueAutocomplete(t *testing.T) {
 
 	autocompleteTestCase(t, db, "value partially specified, full index", "custom-mood:del*", []string{
 		"custom-mood:delighted",
+	})
+
+	autocompleteTestCase(t, db, "value partially specified, trailing dash", "servers-dc:us-*", []string{
+		"servers-dc:us-east",
+		"servers-dc:us-west",
 	})
 
 }

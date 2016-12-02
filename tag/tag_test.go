@@ -119,6 +119,7 @@ func TestNeedsKey(t *testing.T) {
 		"server-state":      false,
 		"server":            false,
 		"server-":           true,
+		"server-foo:blorg-": false,
 	}
 	for test, expected := range cases {
 		res := NeedsKey(test)
@@ -130,11 +131,12 @@ func TestNeedsKey(t *testing.T) {
 
 func TestNeedsValue(t *testing.T) {
 	cases := map[string]bool{
-		"server":            false,
-		"server-":           false,
-		"server-state":      false,
-		"server-state:":     true,
-		"server-state:live": false,
+		"server":             false,
+		"server-":            false,
+		"server-state":       false,
+		"server-state:":      true,
+		"server-state:live":  false,
+		"server-state:live-": false,
 	}
 	for test, expected := range cases {
 		res := NeedsValue(test)
