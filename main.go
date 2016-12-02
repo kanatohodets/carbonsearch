@@ -293,6 +293,9 @@ func main() {
 
 	stats = util.InitStats()
 
+	// +1 to track every over the number of buckets we track
+	timeBuckets = make([]int64, Config.Buckets+1)
+
 	// nothing in the config? check the environment
 	if Config.GraphiteHost == "" {
 		if host := os.Getenv("GRAPHITEHOST") + ":" + os.Getenv("GRAPHITEPORT"); host != ":" {
@@ -334,9 +337,6 @@ func main() {
 		graphite.Register(fmt.Sprintf("carbon.search.%s.full_index.generation", hostname), expvar.Func(func() interface{} { return stats.FullIndex.Get("generation") }))
 		graphite.Register(fmt.Sprintf("carbon.search.%s.full_index.generation_time", hostname), expvar.Func(func() interface{} { return stats.FullIndex.Get("generation-time") }))
 		graphite.Register(fmt.Sprintf("carbon.search.%s.full_index.tags_readable", hostname), expvar.Func(func() interface{} { return stats.FullIndex.Get("tags-readable") }))
-
-		// +1 to track every over the number of buckets we track
-		timeBuckets = make([]int64, Config.Buckets+1)
 
 		for i := 0; i < Config.Buckets; i++ {
 			graphite.Register(fmt.Sprintf("carbon.search.%s.requests_in_%dms_to_%dms", hostname, i*100, (i+1)*100), bucketEntry(i))
