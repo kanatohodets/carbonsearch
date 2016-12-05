@@ -292,7 +292,7 @@ func (db *Database) validateServiceIndexPairs(tags []string, givenIndex index.In
 func New(
 	queryLimit, resultLimit int,
 	fullIndexService, textIndexService string,
-	splitIndexConfig map[string]string,
+	splitIndexConfig map[string][]string,
 	stats *util.Stats,
 ) *Database {
 	serviceToIndex := make(map[string]index.Index)
@@ -312,14 +312,22 @@ func New(
 
 	writeBuffer := NewWriteBuffer(fullIndex.Name(), toc)
 	splitIndexes := map[string]*split.Index{}
-	for joinKey, service := range splitIndexConfig {
+	for joinKey, services := range splitIndexConfig {
 		index := split.NewIndex(joinKey)
 		splitIndexes[joinKey] = index
-		serviceToIndex[service] = index
 		err := writeBuffer.AddSplitIndex(joinKey)
-		toc.AddIndexServiceEntry("split", joinKey, service)
 		if err != nil {
 			panic(fmt.Sprintf("database: %v has already been loaded. This likely means the config file has %v listed multiple times", joinKey, joinKey))
+		}
+
+		for _, service := range services {
+			_, ok := serviceToIndex[service]
+			if ok {
+				panic(fmt.Sprintf("database: service %v has already been attached to index %v. This likely means the config file has %q listed multiple times under %q in the 'split_indexes' section", service, joinKey, service, joinKey))
+
+			}
+			serviceToIndex[service] = index
+			toc.AddIndexServiceEntry("split", joinKey, service)
 		}
 	}
 

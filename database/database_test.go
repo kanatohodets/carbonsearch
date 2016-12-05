@@ -23,8 +23,8 @@ var queryLimit = 10
 var resultLimit = 10
 var fullService = "custom"
 var textService = "text"
-var splitIndexes = map[string]string{
-	"fqdn": "servers",
+var splitIndexes = map[string][]string{
+	"fqdn": []string{"servers"},
 }
 
 func TestFullQuery(t *testing.T) {
@@ -302,8 +302,8 @@ func TestSplitQuery(t *testing.T) {
 }
 
 func TestTextQuery(t *testing.T) {
-	var unusedSplitIndexes = map[string]string{
-		"foobar_unused_key": "foobar_unused_service",
+	var unusedSplitIndexes = map[string][]string{
+		"foobar_unused_key": []string{"foobar_unused_service"},
 	}
 
 	db := New(queryLimit, resultLimit, fullService, textService, unusedSplitIndexes, stats)

@@ -53,9 +53,9 @@ var Config = struct {
 	GraphiteHost      string            `yaml:"graphite_host"`
 	Consumers         map[string]string `yaml:"consumers"`
 
-	FullIndexService string            `yaml:"full_index_service"`
-	TextIndexService string            `yaml:"text_index_service"`
-	SplitIndexes     map[string]string `yaml:"split_indexes"`
+	FullIndexService string              `yaml:"full_index_service"`
+	TextIndexService string              `yaml:"text_index_service"`
+	SplitIndexes     map[string][]string `yaml:"split_indexes"`
 }{
 	Port: 8070,
 

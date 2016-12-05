@@ -19,7 +19,13 @@ my $http_config = read_config("httpapi.yaml");
 my $port = $http_config->{port};
 (my $endpoint = $http_config->{endpoint}) =~ s/^\///;
 my $splits = $main_config->{split_indexes};
-my %valid_services = map { $_ => 1 } sort values %$splits;
+
+my %valid_services;
+for my $service_list (values %$splits) {
+    for my $service (@$service_list) {
+        $valid_services{$service} = 1;
+    }
+}
 
 my %tag_soup = (
     servers => {

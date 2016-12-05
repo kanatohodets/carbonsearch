@@ -38,7 +38,9 @@ text_index_service: "text"
 # 'servers' data source in 'servers-dc:us_east' associates tags with metrics
 # through the 'fqdn' join key.
 split_indexes:
-    fqdn: "servers"
+    fqdn:
+        - "servers" # like some asset management data source, or facts from the server itself
+        - "lb" # liveness in the loadbalancer, pool association for this host, etc.
 
 # ----consumers----
 # adding a line to 'consumers' implies that carbonsearch should use this consumer.
