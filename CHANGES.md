@@ -1,4 +1,4 @@
-### 0.14 - Dec 5, 2016
+### v0.14.0 - Dec 5, 2016
 ---
 This is the first tagged release, so changes are from previously deployed version ([28fbc853](https://github.com/kanatohodets/carbonsearch/commit/28fbc853753f742347afbb9acf577f6996e360b4)).
 
