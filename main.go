@@ -434,6 +434,7 @@ func main() {
 		}, bucketRequestTimes))))
 
 		portStr := fmt.Sprintf(":%d", Config.Port)
+		expvar.NewString("BuildVersion").Set(BuildVersion)
 		logger.Logln("Starting carbonsearch", BuildVersion)
 		logger.Logf("listening on %s\n", portStr)
 		err := http.ListenAndServe(portStr, gziphandler.GzipHandler(http.DefaultServeMux))
