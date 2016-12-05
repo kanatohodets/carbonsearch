@@ -141,6 +141,7 @@ func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, e
 func findHandler(w http.ResponseWriter, req *http.Request) {
 	uri, _ := url.ParseRequestURI(req.URL.RequestURI())
 	uriQuery := uri.Query()
+	start := time.Now()
 
 	stats.QueriesHandled.Add(1)
 	queries := uriQuery["query"]
@@ -187,6 +188,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		logger.Logf("autocomplete: %q returned %v options in %v", trimmedQuery, len(result.Matches), time.Since(start))
 	} else {
 		queryTags, err := db.ParseQuery(trimmedQuery)
 		if err != nil {
@@ -199,6 +201,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		logger.Logf("search: %q returned %v metrics in %v", trimmedQuery, len(result.Matches), time.Since(start))
 	}
 
 	if format == "protobuf" {
@@ -410,25 +413,25 @@ func main() {
 	expvar.Publish("Config", expvar.Func(func() interface{} { return Config }))
 
 	go func() {
-		http.HandleFunc("/metrics/find/", httputil.TrackConnections(httputil.TimeHandler(findHandler, bucketRequestTimes)))
+		http.HandleFunc("/metrics/find/", loggingHandler(httputil.TrackConnections(httputil.TimeHandler(findHandler, bucketRequestTimes))))
 
-		http.HandleFunc("/admin/toc/", httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
+		http.HandleFunc("/admin/toc/", loggingHandler(httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			enc := json.NewEncoder(w)
 			err = enc.Encode(db.TableOfContents())
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-		}, bucketRequestTimes)))
+		}, bucketRequestTimes))))
 
-		http.HandleFunc("/admin/metric_list/", httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
+		http.HandleFunc("/admin/metric_list/", loggingHandler(httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			enc := json.NewEncoder(w)
 			err = enc.Encode(db.MetricList())
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-		}, bucketRequestTimes)))
+		}, bucketRequestTimes))))
 
 		portStr := fmt.Sprintf(":%d", Config.Port)
 		logger.Logln("Starting carbonsearch", BuildVersion)
@@ -469,4 +472,12 @@ func printUsageErrorAndExit(format string, values ...interface{}) {
 	fmt.Fprintln(os.Stderr, "Available command line options:")
 	flag.PrintDefaults()
 	os.Exit(64)
+}
+
+func loggingHandler(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+		fn(w, req)
+		logger.Logf("%s - %v", req.URL.String(), time.Since(start))
+	}
 }
