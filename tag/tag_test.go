@@ -12,6 +12,8 @@ func TestParse(t *testing.T) {
 		"lb-pool:www":                                {"lb", "pool", "www"},
 		"custom-favorites:btyler":                    {"custom", "favorites", "btyler"},
 		"server-interfaces:eth1:ip_address:10_1_2_3": {"server", "interfaces", "eth1:ip_address:10_1_2_3"},
+		// while the query parser will reject this tag for ambiguity, the tag parser has no problem
+		"server-interfaces:eth1:ip_address:10.1.2.3": {"server", "interfaces", "eth1:ip_address:10.1.2.3"},
 	}
 
 	for valid, expected := range validCases {
@@ -41,7 +43,6 @@ func TestParse(t *testing.T) {
 		"server",
 		"btyler:favorites-custom",
 		"btyler:favorites-custom",
-		"server-interfaces:eth1:ip_address:10.1.2.3",
 	}
 
 	for _, invalid := range invalidCases {

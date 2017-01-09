@@ -70,11 +70,6 @@ func RelaxedParse(tag string) (string, string, string, error) {
 func getPositions(tag string) (int, int, error) {
 	serviceDelimiter := strings.Index(tag, serviceToKey)
 	kvMarker := strings.Index(tag, keyToValue)
-	hasDots := strings.Index(tag, ".")
-	//TODO(nnuss): graphite allows '\' escaping dots
-	if hasDots != -1 {
-		return serviceDelimiter, kvMarker, fmt.Errorf("tag: %q is an invalid tag: it contains full-stop characters, which will confuse graphite clients", tag)
-	}
 
 	// has a '-', has a ':', and the ':' has at least one character between it and the '-'
 	if serviceDelimiter == -1 || kvMarker == -1 || kvMarker < serviceDelimiter+1 {

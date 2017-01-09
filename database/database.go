@@ -19,6 +19,10 @@ import (
 
 var logger mlog.Level
 
+var OpenQuote = '<'
+var CloseQuote = '>'
+var Quotes = string([]rune{OpenQuote, CloseQuote})
+
 // Database abstracts over contained indexes
 type Database struct {
 	stats *util.Stats
@@ -391,7 +395,63 @@ func (db *Database) ParseQuery(query string) (map[string][]string, error) {
 
 	//NOTE(btyler) v1 only supports (implicit) 'and': otherwise we need precedence rules and...yuck
 	// additionally, you can get 'or' by adding more metrics to your query
-	tags := strings.Split(query, ".")
+	var tags []string
+	// dopey quote matching (we don't support nested quotes, so don't bother with a stack)
+	// note that this parsing drops the quote characters from the query
+	if strings.ContainsAny(query, Quotes) {
+		inQuotes := false
+		currentTag := make([]rune, 0, 50)
+		for i, char := range query {
+			if i == len(query)-1 {
+				if inQuotes {
+					if char == CloseQuote {
+						tags = append(tags, string(currentTag))
+						continue
+					} else {
+						return nil, fmt.Errorf("database ParseQuery: invalid query (hanging quotes): %q", query)
+					}
+				}
+
+				currentTag = append(currentTag, char)
+				tags = append(tags, string(currentTag))
+			}
+
+			if inQuotes {
+				if char == CloseQuote {
+					inQuotes = false
+					continue
+				}
+
+				if char == OpenQuote {
+					return nil, fmt.Errorf("database ParseQuery: invalid query (two open quotes in a row): %q", query)
+				}
+			}
+
+			if !inQuotes {
+				if char == OpenQuote {
+					inQuotes = true
+					continue
+				}
+
+				if char == CloseQuote {
+					return nil, fmt.Errorf("database ParseQuery: invalid query (close quote without matching open): %q", query)
+				}
+
+				// found the end of a tag, reset and start on the next one
+				if char == '.' {
+					tags = append(tags, string(currentTag))
+					currentTag = make([]rune, 0, 50)
+					continue
+				}
+			}
+
+			currentTag = append(currentTag, char)
+		}
+	} else {
+		// no quotes, so our parsing is trivial
+		tags = strings.Split(query, ".")
+	}
+
 	if len(tags) > db.queryLimit {
 		return nil, fmt.Errorf(
 			"database ParseQuery: max query size is %v, but this query has %v tags. try again with a smaller query",

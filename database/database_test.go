@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
@@ -531,6 +532,62 @@ func TestParseQuery(t *testing.T) {
 	}
 }
 
+func TestParseQueryWithQuotes(t *testing.T) {
+	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
+	parseTagsTestCase(t, db, "quotes in query",
+		translateQuotes("text-match:<foo.bar.baz>"),
+		map[string][]string{
+			"text": {"text-match:foo.bar.baz"},
+		},
+	)
+
+	parseTagsTestCase(t, db, "quotes in query, multiple tags",
+		translateQuotes("text-match:<foo.bar.baz>.text-match:blorg"),
+		map[string][]string{
+			"text": {"text-match:foo.bar.baz", "text-match:blorg"},
+		},
+	)
+
+	parseTagsErrorCase(t, db, "double quote open",
+		translateQuotes("text-match:<<foo.bar>"),
+		"database ParseQuery: invalid query (two open quotes in a row): \"text-match:<<foo.bar>\"",
+	)
+
+	parseTagsErrorCase(t, db, "double quote close",
+		translateQuotes("text-match:<foo.bar>>"),
+		"database ParseQuery: invalid query (close quote without matching open): \"text-match:<foo.bar>>\"",
+	)
+
+	parseTagsErrorCase(t, db, "close without any open",
+		translateQuotes("text-match:foo.bar>"),
+		"database ParseQuery: invalid query (close quote without matching open): \"text-match:foo.bar>\"",
+	)
+
+	parseTagsErrorCase(t, db, "hanging quote",
+		translateQuotes("text-match:<foo.bar"),
+		"database ParseQuery: invalid query (hanging quotes): \"text-match:<foo.bar\"",
+	)
+
+	parseTagsErrorCase(t, db, "dot outside of quotes",
+		translateQuotes("text-match:blorg.<foo.bar>"),
+		"tag: \"foo.bar\" is an invalid tag, should be: service-key:value",
+	)
+
+}
+
+func parseTagsErrorCase(t *testing.T, db *Database, testName, query, expectedErr string) {
+	_, err := db.ParseQuery(query)
+	if err == nil {
+		t.Errorf("error case %q failed to throw error", testName)
+		return
+	}
+
+	if err.Error() != expectedErr {
+		t.Errorf("error case %q threw an unexpected error: got %q, expected %q", testName, err, expectedErr)
+		return
+	}
+}
+
 func parseTagsTestCase(t *testing.T, db *Database, testName string, query string, expected map[string][]string) {
 	parsed, err := db.ParseQuery(query)
 	if err != nil {
@@ -541,7 +598,7 @@ func parseTagsTestCase(t *testing.T, db *Database, testName string, query string
 	for service, expectedTags := range expected {
 		parsedTags, ok := parsed[service]
 		if !ok {
-			t.Errorf("%v: expected %v in parsed tags, but it wasn't there", testName, service)
+			t.Errorf("%v: expected %q in parsed tags, but it wasn't there", testName, service)
 			return
 		}
 
@@ -558,6 +615,11 @@ func parseTagsTestCase(t *testing.T, db *Database, testName string, query string
 			return
 		}
 	}
+}
+
+func translateQuotes(query string) string {
+	opens := strings.Replace(query, "<", string(OpenQuote), -1)
+	return strings.Replace(opens, ">", string(CloseQuote), -1)
 }
 
 func generateRandomSplitSet(size int) map[string]map[string][]string {
