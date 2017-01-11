@@ -33,6 +33,7 @@ import (
 	"github.com/dgryski/httputil"
 
 	"github.com/NYTimes/gziphandler"
+	"github.com/facebookgo/grace/gracehttp"
 	"github.com/gogo/protobuf/proto"
 	"github.com/peterbourgon/g2g"
 )
@@ -218,6 +219,24 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	}
+}
+
+func tocHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	err := enc.Encode(db.TableOfContents())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func metricListHandler(w http.ResponseWriter, req *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	err := enc.Encode(db.MetricList())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
@@ -412,32 +431,48 @@ func main() {
 	expvar.Publish("requestBuckets", expvar.Func(renderTimeBuckets))
 	expvar.Publish("Config", expvar.Func(func() interface{} { return Config }))
 
+
 	go func() {
-		http.HandleFunc("/metrics/find/", loggingHandler(httputil.TrackConnections(httputil.TimeHandler(findHandler, bucketRequestTimes))))
+		mux := http.NewServeMux()
+		mux.Handle("/metrics/find/",
+			gziphandler.GzipHandler(
+				loggingHandler(
+					httputil.TrackConnections(
+						httputil.TimeHandler(http.HandlerFunc(findHandler), bucketRequestTimes),
+					),
+				),
+			),
+		)
 
-		http.HandleFunc("/admin/toc/", loggingHandler(httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			enc := json.NewEncoder(w)
-			err = enc.Encode(db.TableOfContents())
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		}, bucketRequestTimes))))
+		mux.Handle("/admin/toc/",
+			gziphandler.GzipHandler(
+				loggingHandler(
+					httputil.TrackConnections(
+						httputil.TimeHandler(http.HandlerFunc(tocHandler), bucketRequestTimes),
+					),
+				),
+			),
+		)
 
-		http.HandleFunc("/admin/metric_list/", loggingHandler(httputil.TrackConnections(httputil.TimeHandler(func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			enc := json.NewEncoder(w)
-			err = enc.Encode(db.MetricList())
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-		}, bucketRequestTimes))))
+		mux.Handle("/admin/metric_list/",
+			gziphandler.GzipHandler(
+				loggingHandler(
+					httputil.TrackConnections(
+						httputil.TimeHandler(http.HandlerFunc(metricListHandler), bucketRequestTimes),
+					),
+				),
+			),
+		)
 
 		portStr := fmt.Sprintf(":%d", Config.Port)
 		expvar.NewString("BuildVersion").Set(BuildVersion)
 		logger.Logln("Starting carbonsearch", BuildVersion)
 		logger.Logf("listening on %s\n", portStr)
-		err := http.ListenAndServe(portStr, gziphandler.GzipHandler(http.DefaultServeMux))
+
+		err := gracehttp.Serve(
+			&http.Server{Addr: portStr, Handler: mux},
+		)
+
 		if err != nil {
 			logger.Fatalf("failure to start carbonsearch API: %v", err)
 		}
