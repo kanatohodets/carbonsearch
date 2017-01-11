@@ -1,5 +1,12 @@
 # can also be 'newest'
 offset: "oldest"
+# how near to the HighWaterMark of each topic does carbonsearch need to be
+# before we consider it ready to serve queries. this is per topic, so
+# while 'custom' might reach 99% very quickly, the index will not serve
+# requests until 'metric' and 'tag' have also crossed the threshold
+# defaults to 0, which will allow carbonsearch to serve requests before
+# indexing any data
+warm_threshold: 0.8
 # kafka peers to connect to
 broker_list: ["localhost:9092"]
 # which topics to subscribe to, and how to interpret the messages there

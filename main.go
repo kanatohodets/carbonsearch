@@ -245,6 +245,7 @@ func main() {
 	blockingProfile := flag.String("blockProfile", "", "Path to `block profile output file`. Block profiler disabled if empty.")
 	cpuProfile := flag.String("cpuProfile", "", "Path to `cpu profile output file`. CPU profiler disabled if empty.")
 	interval := flag.Duration("i", 0, "interval to report internal statistics to graphite")
+	coldStart := flag.Bool("coldStart", false, "start accepting queries immediately, without waiting for index to warm")
 	flag.Parse()
 
 	if *configPath == "" {
@@ -431,6 +432,16 @@ func main() {
 	expvar.Publish("requestBuckets", expvar.Func(renderTimeBuckets))
 	expvar.Publish("Config", expvar.Func(func() interface{} { return Config }))
 
+	if *coldStart {
+		logger.Logln("skipping warmup period: -coldStart specified")
+	} else {
+		wg := &sync.WaitGroup{}
+		for _, consumer := range consumers {
+			wg.Add(1)
+			go consumer.WaitUntilWarm(wg)
+		}
+		wg.Wait()
+	}
 
 	go func() {
 		mux := http.NewServeMux()

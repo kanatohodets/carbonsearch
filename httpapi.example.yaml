@@ -1,3 +1,6 @@
-# full routes will be /consumer/tag, /consumer/metric, and /consumer/custom
+# full routes will be /consumer/tag, /consumer/metric, /consumer/custom, and /consumer/progress
 endpoint: "/consumer"
+# the HTTP consumer is considered warm when a value >= 'warm_threshold' is sent in the body of a request to /consumer/progress.
+# defaults to 0, which will allow carbonsearch to serve requests before indexing any data
+warm_threshold: 0.8
 port: 8100

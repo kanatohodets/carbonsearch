@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/dgryski/carbonzipper/mlog"
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
@@ -17,8 +20,9 @@ var logger mlog.Level
 
 // Config holds the contents of httpapi.yaml
 type Config struct {
-	Port     int    `yaml:"port"`
-	Endpoint string `yaml:"endpoint"`
+	WarmThreshold float32 `yaml:"warm_threshold"`
+	Port          int     `yaml:"port"`
+	Endpoint      string  `yaml:"endpoint"`
 }
 
 // Consumer represents a carbonsearch HTTP API data source: it listens for POST
@@ -28,6 +32,10 @@ type Consumer struct {
 	port     int
 	endpoint string
 	wg       *sync.WaitGroup
+
+	warmThreshold float32
+	progress      float32
+	progressMut   sync.RWMutex
 }
 
 // New reads the HTTP API consumer config at the given path, and returns an
@@ -39,10 +47,37 @@ func New(configPath string) (*Consumer, error) {
 		return nil, err
 	}
 
+	if config.WarmThreshold > 0.01 {
+		logger.Logf("HTTP consumer: warm threshold set to %v", config.WarmThreshold)
+	} else {
+		logger.Logf("HTTP consumer: warning, warm_threshold is very low or unset (value: %v). Carbonsearch may start serving requests before much data has been indexed from the HTTP API", config.WarmThreshold)
+	}
+
 	return &Consumer{
 		port:     config.Port,
 		endpoint: config.Endpoint,
+
+		warmThreshold: config.WarmThreshold,
+		progress:      0,
+		progressMut:   sync.RWMutex{},
 	}, nil
+}
+
+// WaitUntilWarm blocks until the HTTP consumer receives a message indicating
+// that the index should be considered warm
+func (h *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
+	for {
+		time.Sleep(5 * time.Second)
+		h.progressMut.RLock()
+		progress := h.progress
+		h.progressMut.RUnlock()
+		if progress >= h.warmThreshold {
+			logger.Logf("HTTP consumer considered warm (%v meets or exceeds the warmup threshold %v)", progress, h.warmThreshold)
+			wg.Done()
+			return nil
+		}
+	}
+	return nil
 }
 
 // Start starts an HTTP server listening on the configured endpoint, inserting
@@ -51,6 +86,28 @@ func (h *Consumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 	wg.Add(1)
 	h.wg = wg
 	go func() {
+		http.HandleFunc(h.endpoint+"/progress", func(w http.ResponseWriter, req *http.Request) {
+			payload, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				logger.Logf("problem reading body :( /progress %s, %s", err, string(payload))
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			trimmed := strings.TrimSpace(string(payload))
+			progress, err := strconv.ParseFloat(trimmed, 32)
+			if err != nil {
+				logger.Logf("failed to parse progress value: %v %v", err, string(payload))
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			h.progressMut.Lock()
+			h.progress = float32(progress)
+			h.progressMut.Unlock()
+			w.Write([]byte(fmt.Sprintf("OK - progress set to %.2f (threshold: %v)\n", progress, h.warmThreshold)))
+		})
+
 		http.HandleFunc(h.endpoint+"/tag", func(w http.ResponseWriter, req *http.Request) {
 			payload, err := ioutil.ReadAll(req.Body)
 			if err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/dgryski/carbonzipper/mlog"
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
@@ -17,9 +18,10 @@ var logger mlog.Level
 
 // Config holds the contents of kafka.yaml
 type Config struct {
-	Offset       string            `yaml:"offset"`
-	BrokerList   []string          `yaml:"broker_list"`
-	TopicMapping map[string]string `yaml:"topic_mapping"`
+	WarmThreshold float32           `yaml:"warm_threshold"`
+	Offset        string            `yaml:"offset"`
+	BrokerList    []string          `yaml:"broker_list"`
+	TopicMapping  map[string]string `yaml:"topic_mapping"`
 }
 
 // Consumer represents a carbonsearch kafka data source: it subscribes to a set
@@ -27,11 +29,15 @@ type Config struct {
 // carbonsearch Database.
 type Consumer struct {
 	stats             *util.Stats
+	warmThreshold     float32
 	initialOffset     int64
 	consumer          sarama.Consumer
 	partitionsByTopic map[string][]int32
 	topicMapping      map[string]string
 	shutdown          chan bool
+
+	progress    map[string]map[int32]float32
+	progressMut sync.Mutex
 }
 
 // New reads the kafka consumer config at the given path, and returns an initialized consumer, ready to Start.
@@ -57,6 +63,14 @@ func New(configPath string, stats *util.Stats) (*Consumer, error) {
 		return nil, fmt.Errorf("kafka consumer: Failed to create a consumer: %s", err)
 	}
 
+	if config.WarmThreshold > 0.01 {
+		logger.Logf("kafka consumer: warm threshold set to %v", config.WarmThreshold)
+	} else {
+		logger.Logf("kafka consumer: warning, warm_threshold is very low or unset (value: %v). Carbonsearch may start serving requests before much data has been indexed from the kafka topics", config.WarmThreshold)
+	}
+
+	// map[topic]map[partition]progress%
+	progress := map[string]map[int32]float32{}
 	partitionsByTopic := make(map[string][]int32)
 	for topic := range config.TopicMapping {
 		//NOTE(btyler) always fetching all partitions
@@ -65,15 +79,51 @@ func New(configPath string, stats *util.Stats) (*Consumer, error) {
 			return nil, err
 		}
 		partitionsByTopic[topic] = partitionList
+
+		progress[topic] = map[int32]float32{}
+		for _, partition := range partitionList {
+			progress[topic][partition] = 0
+		}
 	}
 
 	return &Consumer{
+		stats:             stats,
+		warmThreshold:     config.WarmThreshold,
 		initialOffset:     initialOffset,
 		consumer:          c,
 		partitionsByTopic: partitionsByTopic,
 		topicMapping:      config.TopicMapping,
 		shutdown:          make(chan bool),
+
+		progress:    progress,
+		progressMut: sync.Mutex{},
 	}, nil
+}
+
+func (k *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
+	for {
+		time.Sleep(5 * time.Second)
+		k.progressMut.Lock()
+		warmTopics := 0
+		for topic, partitionProgress := range k.progress {
+			var progressSum float32 = 0
+			for _, progress := range partitionProgress {
+				progressSum += progress
+			}
+
+			avgPartitionProgress := progressSum / float32(len(partitionProgress))
+			if avgPartitionProgress >= k.warmThreshold {
+				logger.Logf("kafka consumer: topic %v now considered warm (%v meets or exceeds threshold of %v)", topic, avgPartitionProgress, k.warmThreshold)
+				warmTopics++
+			}
+		}
+		k.progressMut.Unlock()
+		if warmTopics == len(k.topicMapping) {
+			logger.Logf("kafka consumer: all topics reached warmup threshold (%v)", k.warmThreshold)
+			wg.Done()
+			return nil
+		}
+	}
 }
 
 // Start begins reading from the configured kafka topics, inserting messages into Database as they're consumed.
@@ -182,6 +232,10 @@ func (k *Consumer) readCustom(pc sarama.PartitionConsumer, db *database.Database
 
 // trackPosition allows kafka consumers to report their `cur` position
 func (k *Consumer) trackPosition(topic string, p int32, cur, new int64) {
+	k.progressMut.Lock()
+	k.progress[topic][p] = float32(cur) / float32(new)
+	k.progressMut.Unlock()
+
 	k.stats.Progress.Set(fmt.Sprintf("%s-%d-current", topic, p), util.ExpInt(cur))
 	k.stats.Progress.Set(fmt.Sprintf("%s-%d-newest", topic, p), util.ExpInt(new))
 }
