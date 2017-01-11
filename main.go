@@ -387,7 +387,7 @@ func main() {
 
 	constructors := map[string]func(string) (consumer.Consumer, error){
 		"kafka": func(confPath string) (consumer.Consumer, error) {
-			c, err := kafka.New(confPath)
+			c, err := kafka.New(confPath, stats)
 			return c, err
 		},
 		"httpapi": func(confPath string) (consumer.Consumer, error) {

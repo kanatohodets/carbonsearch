@@ -26,6 +26,7 @@ type Config struct {
 // of topics in kafka, and uses the messages from those topics to populate the
 // carbonsearch Database.
 type Consumer struct {
+	stats             *util.Stats
 	initialOffset     int64
 	consumer          sarama.Consumer
 	partitionsByTopic map[string][]int32
@@ -34,7 +35,7 @@ type Consumer struct {
 }
 
 // New reads the kafka consumer config at the given path, and returns an initialized consumer, ready to Start.
-func New(configPath string) (*Consumer, error) {
+func New(configPath string, stats *util.Stats) (*Consumer, error) {
 	config := &Config{}
 	err := util.ReadConfig(configPath, config)
 	if err != nil {
@@ -98,11 +99,11 @@ func (k *Consumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 
 			switch k.topicMapping[topic] {
 			case "metric":
-				go readMetric(pc, db)
+				go k.readMetric(pc, db)
 			case "tag":
-				go readTag(pc, db)
+				go k.readTag(pc, db)
 			case "custom":
-				go readCustom(pc, db)
+				go k.readCustom(pc, db)
 			default:
 				panic(fmt.Sprintf("There's no topic mapping for %s in the kafka consumer config file. Topic mappings can be 'metric', 'tag', or 'custom'", topic))
 			}
@@ -122,9 +123,9 @@ func (k *Consumer) Name() string {
 	return "kafka"
 }
 
-func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
+func (k *Consumer) readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
-		db.TrackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
+		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
 		var msg *m.KeyMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			logger.Logln("ermg decoding problem :( ", err)
@@ -141,9 +142,9 @@ func readMetric(pc sarama.PartitionConsumer, db *database.Database) {
 	}
 }
 
-func readTag(pc sarama.PartitionConsumer, db *database.Database) {
+func (k *Consumer) readTag(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
-		db.TrackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
+		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
 		var msg *m.KeyTag
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			logger.Logln("ermg decoding problem :( ", err)
@@ -160,9 +161,9 @@ func readTag(pc sarama.PartitionConsumer, db *database.Database) {
 	}
 }
 
-func readCustom(pc sarama.PartitionConsumer, db *database.Database) {
+func (k *Consumer) readCustom(pc sarama.PartitionConsumer, db *database.Database) {
 	for kafkaMsg := range pc.Messages() {
-		db.TrackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
+		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
 		var msg *m.TagMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			logger.Logln("ermg decoding problem :( ", err)
@@ -177,4 +178,10 @@ func readCustom(pc sarama.PartitionConsumer, db *database.Database) {
 			}
 		}
 	}
+}
+
+// trackPosition allows kafka consumers to report their `cur` position
+func (k *Consumer) trackPosition(topic string, p int32, cur, new int64) {
+	k.stats.Progress.Set(fmt.Sprintf("%s-%d-current", topic, p), util.ExpInt(cur))
+	k.stats.Progress.Set(fmt.Sprintf("%s-%d-newest", topic, p), util.ExpInt(new))
 }
