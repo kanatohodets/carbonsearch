@@ -77,7 +77,6 @@ func (h *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
 			return nil
 		}
 	}
-	return nil
 }
 
 // Start starts an HTTP server listening on the configured endpoint, inserting
