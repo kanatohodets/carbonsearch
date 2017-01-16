@@ -2,4 +2,4 @@
 
 package index
 
-const debug = true
+const Debug = true

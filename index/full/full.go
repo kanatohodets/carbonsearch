@@ -56,7 +56,9 @@ func (fi *Index) Materialize(wg *sync.WaitGroup, fullBuffer map[index.Tag]map[in
 	g := fi.Generation()
 	elapsed := time.Since(start)
 	fi.IncreaseGenerationTime(int64(elapsed))
-	logger.Logf("full index: New generation %v took %v to generate", g, elapsed)
+	if index.Debug {
+		logger.Logf("full index: New generation %v took %v to generate", g, elapsed)
+	}
 }
 
 func (fi *Index) Query(q *index.Query) ([]index.Metric, error) {

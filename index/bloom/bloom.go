@@ -2,18 +2,20 @@ package bloom
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/kanatohodets/carbonsearch/index"
 
 	"github.com/dgryski/go-bloomindex"
 )
 
 const n = 4
+
+var logger mlog.Level
 
 type swappableBloom struct {
 	mut         sync.RWMutex
@@ -242,7 +244,9 @@ func (ti *Index) Materialize(wg *sync.WaitGroup, rawMetrics []string) {
 	g := ti.Generation()
 	elapsed := time.Since(start)
 	ti.IncreaseGenerationTime(int64(elapsed))
-	log.Printf("text index %s: New generation %v took %v to generate", ti.Name(), g, elapsed)
+	if index.Debug {
+		logger.Logf("text index %s: New generation %v took %v to generate", ti.Name(), g, elapsed)
+	}
 }
 
 func (ti *Index) ValidateMetrics(metrics []string) []string {

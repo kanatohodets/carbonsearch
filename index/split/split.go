@@ -166,7 +166,9 @@ func (si *Index) Materialize(
 	g := si.Generation()
 	elapsed := time.Since(start)
 	si.IncreaseGenerationTime(int64(elapsed))
-	logger.Logf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
+	if index.Debug {
+		logger.Logf("split index %s: New generation %v took %v to generate", si.Name(), g, elapsed)
+	}
 }
 
 func (si *Index) Query(q *index.Query) ([]index.Metric, error) {

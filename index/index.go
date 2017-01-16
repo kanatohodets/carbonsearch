@@ -123,7 +123,7 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 			return []Metric{}
 		}
 
-		if debug {
+		if Debug {
 			if !sort.IsSorted(MetricSlice(list)) {
 				panic("IntersectMetrics: passed unsorted slice")
 			}
@@ -219,7 +219,7 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 			return []Tag{}
 		}
 
-		if debug {
+		if Debug {
 			if !sort.IsSorted(TagSlice(list)) {
 				panic("IntersectTags: passed unsorted slice")
 			}
