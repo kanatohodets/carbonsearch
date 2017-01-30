@@ -127,7 +127,7 @@ func (k *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
 }
 
 // Start begins reading from the configured kafka topics, inserting messages into Database as they're consumed.
-func (k *Consumer) Start(wg *sync.WaitGroup, db *database.Database) error {
+func (k *Consumer) Start(db *database.Database) error {
 	for topic, partitionList := range k.partitionsByTopic {
 		for _, partition := range partitionList {
 			pc, err := k.consumer.ConsumePartition(topic, partition, k.initialOffset)
@@ -136,9 +136,7 @@ func (k *Consumer) Start(wg *sync.WaitGroup, db *database.Database) error {
 				return fmt.Errorf("kafka consumer: Failed to start consumer of topic %s for partition %d: %s", topic, partition, err)
 			}
 
-			wg.Add(1)
 			go func(pc sarama.PartitionConsumer) {
-				defer wg.Done()
 				<-k.shutdown
 				//TODO(btyler) AsyncClose and wait on pc.Messages/pc.Errors?
 				err := pc.Close()

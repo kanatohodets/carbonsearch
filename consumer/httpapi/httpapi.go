@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,7 +32,7 @@ type Config struct {
 type Consumer struct {
 	port     int
 	endpoint string
-	wg       *sync.WaitGroup
+	listener *net.TCPListener
 
 	warmThreshold float32
 	progress      float32
@@ -81,112 +82,114 @@ func (h *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
 
 // Start starts an HTTP server listening on the configured endpoint, inserting
 // messages into Database as they're received.
-func (h *Consumer) Start(wg *sync.WaitGroup, db *database.Database) error {
-	wg.Add(1)
-	h.wg = wg
-	go func() {
-		http.HandleFunc(h.endpoint+"/progress", func(w http.ResponseWriter, req *http.Request) {
-			payload, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				logger.Logf("problem reading body :( /progress %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+func (h *Consumer) Start(db *database.Database) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc(h.endpoint+"/progress", func(w http.ResponseWriter, req *http.Request) {
+		payload, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			logger.Logf("problem reading body :( /progress %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-			trimmed := strings.TrimSpace(string(payload))
-			progress, err := strconv.ParseFloat(trimmed, 32)
-			if err != nil {
-				logger.Logf("failed to parse progress value: %v %v", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+		trimmed := strings.TrimSpace(string(payload))
+		progress, err := strconv.ParseFloat(trimmed, 32)
+		if err != nil {
+			logger.Logf("failed to parse progress value: %v %v", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-			h.progressMut.Lock()
-			h.progress = float32(progress)
-			h.progressMut.Unlock()
-			w.Write([]byte(fmt.Sprintf("OK - progress set to %.2f (threshold: %v)\n", progress, h.warmThreshold)))
-		})
+		h.progressMut.Lock()
+		h.progress = float32(progress)
+		h.progressMut.Unlock()
+		w.Write([]byte(fmt.Sprintf("OK - progress set to %.2f (threshold: %v)\n", progress, h.warmThreshold)))
+	})
 
-		http.HandleFunc(h.endpoint+"/tag", func(w http.ResponseWriter, req *http.Request) {
-			payload, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				logger.Logf("problem reading body :( /consumer/tag %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+	mux.HandleFunc(h.endpoint+"/tag", func(w http.ResponseWriter, req *http.Request) {
+		payload, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			logger.Logf("problem reading body :( /consumer/tag %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-			var msg *m.KeyTag
-			err = json.Unmarshal(payload, &msg)
-			if err != nil {
-				logger.Logf("blorg problem unmarshaling /consumer/tag %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			err = db.InsertTags(msg)
-			if err != nil {
-				logger.Logf("blorg problem writing data! /consumer/tag %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		})
+		var msg *m.KeyTag
+		err = json.Unmarshal(payload, &msg)
+		if err != nil {
+			logger.Logf("blorg problem unmarshaling /consumer/tag %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = db.InsertTags(msg)
+		if err != nil {
+			logger.Logf("blorg problem writing data! /consumer/tag %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	})
 
-		http.HandleFunc(h.endpoint+"/metric", func(w http.ResponseWriter, req *http.Request) {
-			payload, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				logger.Logf("problem reading body :( /consumer/metric %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+	mux.HandleFunc(h.endpoint+"/metric", func(w http.ResponseWriter, req *http.Request) {
+		payload, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			logger.Logf("problem reading body :( /consumer/metric %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-			var msg *m.KeyMetric
-			err = json.Unmarshal(payload, &msg)
-			if err != nil {
-				logger.Logf("blorg problem unmarshaling /consumer/metric %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			err = db.InsertMetrics(msg)
-			if err != nil {
-				logger.Logf("blorg problem writing data! /consumer/metric %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		})
+		var msg *m.KeyMetric
+		err = json.Unmarshal(payload, &msg)
+		if err != nil {
+			logger.Logf("blorg problem unmarshaling /consumer/metric %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = db.InsertMetrics(msg)
+		if err != nil {
+			logger.Logf("blorg problem writing data! /consumer/metric %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	})
 
-		http.HandleFunc(h.endpoint+"/custom", func(w http.ResponseWriter, req *http.Request) {
-			payload, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				logger.Logf("couldn't read the body! /consumer/custom %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+	mux.HandleFunc(h.endpoint+"/custom", func(w http.ResponseWriter, req *http.Request) {
+		payload, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			logger.Logf("couldn't read the body! /consumer/custom %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-			var msg *m.TagMetric
-			err = json.Unmarshal(payload, &msg)
-			if err != nil {
-				logger.Logf("failure to decode! /consumer/custom %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			err = db.InsertCustom(msg)
-			if err != nil {
-				logger.Logf("blorg problem writing data! /consumer/custom %s, %s", err, string(payload))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		})
+		var msg *m.TagMetric
+		err = json.Unmarshal(payload, &msg)
+		if err != nil {
+			logger.Logf("failure to decode! /consumer/custom %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err = db.InsertCustom(msg)
+		if err != nil {
+			logger.Logf("blorg problem writing data! /consumer/custom %s, %s", err, string(payload))
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	})
 
-		portStr := fmt.Sprintf(":%d", h.port)
-		logger.Logf("HTTP consumer Listening on %s\n", portStr)
-		logger.Logln(http.ListenAndServe(portStr, nil))
-	}()
+	portStr := fmt.Sprintf(":%d", h.port)
+	logger.Logf("HTTP consumer Listening on %s\n", portStr)
+	l, err := net.ListenTCP("tcp", &net.TCPAddr{Port: h.port})
+	if err != nil {
+		return err
+	}
+	go http.Serve(l, mux)
+	h.listener = l
 	return nil
 }
 
-// Stop halts the consumer. Note: calling Stop and then later calling Start on the same consumer is undefined.
+// Stop halts the consumer.
 func (h *Consumer) Stop() error {
-	h.wg.Done()
-	return nil
+	logger.Logf("HTTP consumer on port %d stopping", h.port)
+	return h.listener.Close()
 }
 
 // Name returns the name of the consumer

@@ -11,14 +11,12 @@ import (
 	_ "net/http/pprof"
 	"net/url"
 	"os"
-	"os/signal"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/kanatohodets/carbonsearch/consumer"
@@ -375,7 +373,6 @@ func main() {
 
 	}
 
-	wg := &sync.WaitGroup{}
 	db = database.New(
 		Config.QueryLimit,
 		Config.ResultLimit,
@@ -384,7 +381,6 @@ func main() {
 		Config.SplitIndexes,
 		stats,
 	)
-	quit := make(chan bool)
 
 	constructors := map[string]func(string) (consumer.Consumer, error){
 		"kafka": func(confPath string) (consumer.Consumer, error) {
@@ -408,7 +404,7 @@ func main() {
 			printErrorAndExit(1, "could not create new %s consumer: %s", consumerName, err)
 		}
 
-		err = consumer.Start(wg, db)
+		err = consumer.Start(db)
 		if err != nil {
 			printErrorAndExit(1, "could not start %s consumer: %s", consumerName, err)
 		}
@@ -443,68 +439,63 @@ func main() {
 		wg.Wait()
 	}
 
-	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics/find/",
-			gziphandler.GzipHandler(
-				loggingHandler(
-					httputil.TrackConnections(
-						httputil.TimeHandler(http.HandlerFunc(findHandler), bucketRequestTimes),
-					),
+	mux := http.NewServeMux()
+	mux.Handle("/metrics/find/",
+		gziphandler.GzipHandler(
+			loggingHandler(
+				httputil.TrackConnections(
+					httputil.TimeHandler(http.HandlerFunc(findHandler), bucketRequestTimes),
 				),
 			),
-		)
+		),
+	)
 
-		mux.Handle("/admin/toc/",
-			gziphandler.GzipHandler(
-				loggingHandler(
-					httputil.TrackConnections(
-						httputil.TimeHandler(http.HandlerFunc(tocHandler), bucketRequestTimes),
-					),
+	mux.Handle("/admin/toc/",
+		gziphandler.GzipHandler(
+			loggingHandler(
+				httputil.TrackConnections(
+					httputil.TimeHandler(http.HandlerFunc(tocHandler), bucketRequestTimes),
 				),
 			),
-		)
+		),
+	)
 
-		mux.Handle("/admin/metric_list/",
-			gziphandler.GzipHandler(
-				loggingHandler(
-					httputil.TrackConnections(
-						httputil.TimeHandler(http.HandlerFunc(metricListHandler), bucketRequestTimes),
-					),
+	mux.Handle("/admin/metric_list/",
+		gziphandler.GzipHandler(
+			loggingHandler(
+				httputil.TrackConnections(
+					httputil.TimeHandler(http.HandlerFunc(metricListHandler), bucketRequestTimes),
 				),
 			),
-		)
+		),
+	)
 
-		portStr := fmt.Sprintf(":%d", Config.Port)
-		expvar.NewString("BuildVersion").Set(BuildVersion)
-		logger.Logln("Starting carbonsearch", BuildVersion)
-		logger.Logf("listening on %s\n", portStr)
+	portStr := fmt.Sprintf(":%d", Config.Port)
+	expvar.NewString("BuildVersion").Set(BuildVersion)
+	logger.Logln("Starting carbonsearch", BuildVersion)
+	logger.Logf("listening on %s\n", portStr)
 
-		err := gracehttp.Serve(
-			&http.Server{Addr: portStr, Handler: mux},
-		)
-
-		if err != nil {
-			logger.Fatalf("failure to start carbonsearch API: %v", err)
-		}
-	}()
-
-	go func() {
-		signals := make(chan os.Signal, 1)
-		signal.Notify(signals, syscall.SIGTERM, os.Interrupt)
-		<-signals
-		logger.Logln("Shutting down...")
+	beforeRestart := func() error {
 		for _, consumer := range consumers {
 			err := consumer.Stop()
 			if err != nil {
 				logger.Logf("Failed to close consumer %s: %s", consumer.Name(), err)
 			}
 		}
+		return nil
+	}
+	err = gracehttp.ServeWithOptions(
+		[]*http.Server{
+			&http.Server{Addr: portStr, Handler: mux},
+		},
+		// before starting the new process, shut down consumers, stop indexing into the old instance
+		// this is important particularly for the HTTP consumer, since it frees up the port for the new carbonsearch
+		gracehttp.StartupHook(beforeRestart),
+	)
 
-		quit <- true
-	}()
-
-	wg.Wait()
+	if err != nil {
+		logger.Fatalf("failure to start carbonsearch API: %v", err)
+	}
 }
 
 func printErrorAndExit(code int, format string, values ...interface{}) {
