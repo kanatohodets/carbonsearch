@@ -31,8 +31,8 @@ import (
 	"github.com/dgryski/httputil"
 
 	"github.com/NYTimes/gziphandler"
-	"github.com/facebookgo/grace/gracehttp"
 	"github.com/gogo/protobuf/proto"
+	"github.com/kanatohodets/grace/gracehttp"
 	"github.com/peterbourgon/g2g"
 )
 
