@@ -440,6 +440,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
+	mux.Handle("/debug/vars", http.DefaultServeMux)
 	mux.Handle("/metrics/find/",
 		gziphandler.GzipHandler(
 			loggingHandler(
