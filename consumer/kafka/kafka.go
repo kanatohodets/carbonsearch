@@ -101,10 +101,9 @@ func New(configPath string, stats *util.Stats) (*Consumer, error) {
 }
 
 func (k *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
+	warmTopics := map[string]bool{}
 	for {
-		time.Sleep(5 * time.Second)
 		k.progressMut.Lock()
-		warmTopics := 0
 		for topic, partitionProgress := range k.progress {
 			var progressSum float32 = 0
 			for _, progress := range partitionProgress {
@@ -112,17 +111,23 @@ func (k *Consumer) WaitUntilWarm(wg *sync.WaitGroup) error {
 			}
 
 			avgPartitionProgress := progressSum / float32(len(partitionProgress))
-			if avgPartitionProgress >= k.warmThreshold {
-				logger.Logf("kafka consumer: topic %v now considered warm (%v meets or exceeds threshold of %v)", topic, avgPartitionProgress, k.warmThreshold)
-				warmTopics++
+			_, ok := warmTopics[topic]
+			if !ok {
+				if avgPartitionProgress >= k.warmThreshold {
+					logger.Logf("kafka consumer: topic %v now considered warm (%.2f%% meets or exceeds threshold of %.2f%%)", topic, avgPartitionProgress*100, k.warmThreshold*100)
+					warmTopics[topic] = true
+				} else {
+					logger.Logf("kafka consumer: topic %v %.2f%% warm (threshold is %.2f%%)", topic, avgPartitionProgress*100, k.warmThreshold*100)
+				}
 			}
 		}
 		k.progressMut.Unlock()
-		if warmTopics == len(k.topicMapping) {
+		if len(warmTopics) == len(k.topicMapping) {
 			logger.Logf("kafka consumer: all topics reached warmup threshold (%v)", k.warmThreshold)
 			wg.Done()
 			return nil
 		}
+		time.Sleep(10 * time.Second)
 	}
 }
 
@@ -145,6 +150,7 @@ func (k *Consumer) Start(db *database.Database) error {
 				}
 			}(pc)
 
+			k.trackPosition(topic, partition, 0, 0, pc.HighWaterMarkOffset())
 			switch k.topicMapping[topic] {
 			case "metric":
 				go k.readMetric(pc, db)
@@ -172,14 +178,17 @@ func (k *Consumer) Name() string {
 }
 
 func (k *Consumer) readMetric(pc sarama.PartitionConsumer, db *database.Database) {
+	var initialOffset int64 = sarama.OffsetOldest
 	for kafkaMsg := range pc.Messages() {
-		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
+		if initialOffset == sarama.OffsetOldest {
+			initialOffset = kafkaMsg.Offset
+		}
+		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, initialOffset, kafkaMsg.Offset, pc.HighWaterMarkOffset())
 		var msg *m.KeyMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			logger.Logln("ermg decoding problem :( ", err)
 			continue
 		}
-
 		// TODO(btyler): fix malformed messages and let this get caught by database validation
 		if msg.Value != "" && len(msg.Metrics) != 0 {
 			err := db.InsertMetrics(msg)
@@ -191,8 +200,12 @@ func (k *Consumer) readMetric(pc sarama.PartitionConsumer, db *database.Database
 }
 
 func (k *Consumer) readTag(pc sarama.PartitionConsumer, db *database.Database) {
+	var initialOffset int64 = sarama.OffsetOldest
 	for kafkaMsg := range pc.Messages() {
-		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
+		if initialOffset == sarama.OffsetOldest {
+			initialOffset = kafkaMsg.Offset
+		}
+		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, initialOffset, kafkaMsg.Offset, pc.HighWaterMarkOffset())
 		var msg *m.KeyTag
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			logger.Logln("ermg decoding problem :( ", err)
@@ -210,8 +223,12 @@ func (k *Consumer) readTag(pc sarama.PartitionConsumer, db *database.Database) {
 }
 
 func (k *Consumer) readCustom(pc sarama.PartitionConsumer, db *database.Database) {
+	var initialOffset int64 = sarama.OffsetOldest
 	for kafkaMsg := range pc.Messages() {
-		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, kafkaMsg.Offset, pc.HighWaterMarkOffset())
+		if initialOffset == sarama.OffsetOldest {
+			initialOffset = kafkaMsg.Offset
+		}
+		k.trackPosition(kafkaMsg.Topic, kafkaMsg.Partition, initialOffset, kafkaMsg.Offset, pc.HighWaterMarkOffset())
 		var msg *m.TagMetric
 		if err := json.Unmarshal(kafkaMsg.Value, &msg); err != nil {
 			logger.Logln("ermg decoding problem :( ", err)
@@ -229,11 +246,19 @@ func (k *Consumer) readCustom(pc sarama.PartitionConsumer, db *database.Database
 }
 
 // trackPosition allows kafka consumers to report their `cur` position
-func (k *Consumer) trackPosition(topic string, p int32, cur, new int64) {
+func (k *Consumer) trackPosition(topic string, p int32, initial, cur, highWaterMark int64) {
+	scaledCurrentOffset := cur - initial
+	scaledHighOffset := highWaterMark - initial
 	k.progressMut.Lock()
-	k.progress[topic][p] = float32(cur) / float32(new)
+	if highWaterMark == 0 {
+		k.progress[topic][p] = 1
+	} else {
+		k.progress[topic][p] = float32(scaledCurrentOffset) / float32(scaledHighOffset)
+	}
 	k.progressMut.Unlock()
 
-	k.stats.Progress.Set(fmt.Sprintf("%s-%d-current", topic, p), util.ExpInt(cur))
-	k.stats.Progress.Set(fmt.Sprintf("%s-%d-newest", topic, p), util.ExpInt(new))
+	k.stats.Progress.Set(fmt.Sprintf("%s-%d-relative-current", topic, p), util.ExpInt(scaledCurrentOffset))
+	k.stats.Progress.Set(fmt.Sprintf("%s-%d-relative-newest", topic, p), util.ExpInt(scaledHighOffset))
+	k.stats.Progress.Set(fmt.Sprintf("%s-%d-absolute-current", topic, p), util.ExpInt(cur))
+	k.stats.Progress.Set(fmt.Sprintf("%s-%d-absolute-newest", topic, p), util.ExpInt(highWaterMark))
 }
