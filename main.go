@@ -417,17 +417,11 @@ func main() {
 		printErrorAndExit(1, "config index_rotation_rate %q cannot be parsed as a duration. Please check https://golang.org/pkg/time/#ParseDuration for valid expressions", Config.IndexRotationRate)
 	}
 
-	go func() {
-		for {
-			time.Sleep(rotationRate)
-			db.MaterializeIndexes()
-		}
-	}()
-
 	httputil.PublishTrackedConnections("httptrack")
 	expvar.Publish("requestBuckets", expvar.Func(renderTimeBuckets))
 	expvar.Publish("Config", expvar.Func(func() interface{} { return Config }))
 
+	warmStart := time.Now()
 	if *coldStart {
 		logger.Logln("skipping warmup period: -coldStart specified")
 	} else {
@@ -438,6 +432,18 @@ func main() {
 		}
 		wg.Wait()
 	}
+
+	logger.Logf("warmup complete in %v, materializing indexes for the first time (this may take some time)...", time.Since(warmStart))
+	materializeStart := time.Now()
+	db.MaterializeIndexes()
+	logger.Logf("first materialization complete in %v, further materializations will occur per the rotation rate", time.Since(materializeStart))
+
+	go func() {
+		for {
+			time.Sleep(rotationRate)
+			db.MaterializeIndexes()
+		}
+	}()
 
 	mux := http.NewServeMux()
 	mux.Handle("/debug/vars", http.DefaultServeMux)
