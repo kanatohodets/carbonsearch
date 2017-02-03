@@ -1,4 +1,4 @@
-[![Build Status](https://drone.io/github.com/kanatohodets/carbonsearch/status.png)](https://drone.io/github.com/kanatohodets/carbonsearch/latest)
+[ ![Build Status](https://app.codeship.com/projects/b32f1c90-cc2b-0134-cf3e-6af81f706b85/status?branch=master)](https://app.codeship.com/projects/200102)
 
 carbonsearch: graphite-shaped search queries
 --------------------------------------------
