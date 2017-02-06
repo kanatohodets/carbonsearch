@@ -1,3 +1,16 @@
+### v0.15.0 - Feb 6, 2017
+---
+##### Features
+* Support for quoting pieces of `text-match` queries using `<` and `>`. This allows selecting pieces of metric that span dots, like so: `text-match:<df.root.bytes_free>`. This requires a `carbonapi` equal to or newer than [79f91477a](https://github.com/dgryski/carbonapi/commit/79f91477a4e0c985c4af18bf98c8ed3bfb465cec).
+* Graceful restart using a `facebookgo/grace`. Send SIGUSR2 to spawn a new carbonsearch. The old process will hand over to the new one once the new one has warmed up.
+* Warmup period: carbonsearch will wait until it has ingested enough data to serve search queries. This is managed by the `warm_threshold` config setting on a per-consumer basis. This may be bypassed by passing `-coldStart` on the command line.
+
+##### Config
+* `warm_threshold`: a ratio (valid range: 0 to 1) that describes how much progress a consumer should make before considering itself warm. For the Kafka consumer this represents position in the buffer relative to first offset seen; the HTTP consumer must be informed of progress using a POST to /consumer/progress.
+
+##### Misc/Bugs
+* index materialization timings are now only logged under debug builds
+
 ### v0.14.0 - Dec 5, 2016
 ---
 This is the first tagged release, so changes are from previously deployed version ([28fbc853](https://github.com/kanatohodets/carbonsearch/commit/28fbc853753f742347afbb9acf577f6996e360b4)).
