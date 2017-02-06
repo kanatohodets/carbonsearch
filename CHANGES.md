@@ -6,7 +6,7 @@
 * Warmup period: carbonsearch will wait until it has ingested enough data to serve search queries. This is managed by the `warm_threshold` config setting on a per-consumer basis. This may be bypassed by passing `-coldStart` on the command line.
 
 ##### Config
-* `warm_threshold`: a ratio (valid range: 0 to 1) that describes how much progress a consumer should make before considering itself warm. For the Kafka consumer this represents position in the buffer relative to first offset seen; the HTTP consumer must be informed of progress using a POST to /consumer/progress.
+* `warm_threshold`: a ratio (valid range: 0 to 1) that describes how much progress a consumer should make before considering itself warm. For the Kafka consumer this represents position in the buffer relative to first offset seen; the HTTP consumer must be informed of progress using a POST to `/consumer/progress`.
 
 ##### Misc/Bugs
 * index materialization timings are now only logged under debug builds
