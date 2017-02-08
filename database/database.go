@@ -10,9 +10,10 @@ import (
 	m "github.com/kanatohodets/carbonsearch/consumer/message"
 	"github.com/kanatohodets/carbonsearch/database/toc"
 	"github.com/kanatohodets/carbonsearch/index"
-	"github.com/kanatohodets/carbonsearch/index/bloom"
 	"github.com/kanatohodets/carbonsearch/index/full"
 	"github.com/kanatohodets/carbonsearch/index/split"
+	"github.com/kanatohodets/carbonsearch/index/text"
+	"github.com/kanatohodets/carbonsearch/index/text/document"
 	"github.com/kanatohodets/carbonsearch/tag"
 	"github.com/kanatohodets/carbonsearch/util"
 )
@@ -44,7 +45,7 @@ type Database struct {
 	toc *toc.TableOfContents
 
 	FullIndex *full.Index
-	TextIndex *bloom.Index
+	TextIndex *text.Index
 }
 
 /*
@@ -250,7 +251,7 @@ func (db *Database) InsertCustom(msg *m.TagMetric) error {
 // basis, or if we have validations from other indexes, to have each of them
 // generate a blacklist and report on why things failed validation.
 func (db *Database) validateMetrics(metrics []string) []string {
-	return db.TextIndex.ValidateMetrics(metrics)
+	return document.Validate(metrics)
 }
 
 func (db *Database) validateTags(tags []string) []string {
@@ -303,7 +304,7 @@ func New(
 		toc.AddIndexServiceEntry("full", fullIndex.Name(), fullIndexService)
 	}
 
-	textIndex := bloom.NewIndex()
+	textIndex := text.NewIndex(text.BloomBackend)
 	if textIndexService != "" {
 		serviceToIndex[textIndexService] = textIndex
 	}

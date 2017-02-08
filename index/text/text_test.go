@@ -1,4 +1,4 @@
-package bloom
+package text
 
 import (
 	"sync"
@@ -7,8 +7,10 @@ import (
 	"github.com/kanatohodets/carbonsearch/index"
 )
 
+var testBackend backendType = BloomBackend
+
 func TestQuery(t *testing.T) {
-	ti := NewIndex()
+	ti := NewIndex(testBackend)
 	metrics := []string{
 		"monitors.was_the_site_up",
 		"user.messing_around_in_test",
@@ -40,7 +42,7 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
-	in := NewIndex()
+	in := NewIndex(testBackend)
 	metrics = []string{
 		"foox",
 		"bart",
@@ -71,7 +73,7 @@ func TestQuery(t *testing.T) {
 	searchTest(t, "full long metric name", in, []string{"rose.daffodil.cron"}, []string{"rose.daffodil.cron"})
 	searchTest(t, "intersect, not union", in, []string{"kpop", "bazz"}, []string{"kpopbazz"})
 
-	emptyIndex := NewIndex()
+	emptyIndex := NewIndex(testBackend)
 	searchTest(t, "zero results", emptyIndex, []string{"quxx"}, []string{})
 	searchTest(t, "simple", emptyIndex, []string{"foox"}, []string{})
 }
