@@ -59,7 +59,7 @@ func (pi *Index) Materialize(rawMetrics []string) int {
 		metric := hashed[i]
 		tokens, err := document.Tokenize(rawMetric)
 		if err != nil {
-			panic(fmt.Sprintf("%v: cannot tokenize %q: %v", pi.Name(), metric))
+			panic(fmt.Sprintf("%v: cannot tokenize %q: %v", pi.Name(), metric, err))
 		}
 		docID := newIdx.AddDocument(unsafeTermIDSlice(tokens))
 		newDocToMetric[docID] = metric
