@@ -103,7 +103,6 @@ type Index struct {
 	// The common case is there is 1 index.Tag
 	writtenTags uint32
 
-	metricMutex    sync.RWMutex
 	writtenJoins   uint32
 	writtenMetrics uint32
 }
