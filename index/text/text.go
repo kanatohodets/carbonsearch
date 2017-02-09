@@ -9,6 +9,7 @@ import (
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/text/bloom"
 	"github.com/kanatohodets/carbonsearch/index/text/document"
+	"github.com/kanatohodets/carbonsearch/index/text/postings"
 
 	"github.com/dgryski/carbonzipper/mlog"
 )
@@ -25,7 +26,8 @@ var logger mlog.Level
 type backendType int
 
 const (
-	BloomBackend backendType = iota
+	BloomBackend    backendType = iota
+	PostingsBackend             = iota
 )
 
 type TextBackend interface {
@@ -49,6 +51,9 @@ func NewIndex(selectedBackend backendType) *Index {
 	switch selectedBackend {
 	case BloomBackend:
 		backend = bloom.NewIndex()
+	case PostingsBackend:
+		backend = postings.NewIndex()
+
 	default:
 		panic("no backend selected for text index")
 	}

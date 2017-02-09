@@ -304,7 +304,7 @@ func New(
 		toc.AddIndexServiceEntry("full", fullIndex.Name(), fullIndexService)
 	}
 
-	textIndex := text.NewIndex(text.BloomBackend)
+	textIndex := text.NewIndex(text.PostingsBackend)
 	if textIndexService != "" {
 		serviceToIndex[textIndexService] = textIndex
 	}
