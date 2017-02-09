@@ -5,14 +5,11 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/text/document"
 
 	"github.com/dgryski/go-bloomindex"
 )
-
-var logger mlog.Level
 
 type swappableBloom struct {
 	mut         sync.RWMutex
