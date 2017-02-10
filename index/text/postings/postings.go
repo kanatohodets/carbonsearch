@@ -12,7 +12,7 @@ import (
 )
 
 type Index struct {
-	idx       atomic.Value //*postings.Index
+	idx       atomic.Value //*postings.CompressedIndex
 	docMetric atomic.Value //map[postings.DocID]index.Metric
 	metricMap atomic.Value //map[index.Metric]string
 }
@@ -20,7 +20,7 @@ type Index struct {
 func NewIndex() *Index {
 	pi := &Index{}
 
-	pi.idx.Store(postings.NewIndex(nil))
+	pi.idx.Store(&postings.CompressedIndex{})
 	pi.metricMap.Store(map[index.Metric]string{})
 	pi.docMetric.Store(map[postings.DocID]index.Metric{})
 
@@ -66,7 +66,7 @@ func (pi *Index) Materialize(rawMetrics []string) int {
 		newMetricMap[metric] = rawMetric
 	}
 
-	pi.idx.Store(newIdx)
+	pi.idx.Store(postings.NewCompressedIndex(newIdx))
 	pi.docMetric.Store(newDocToMetric)
 	pi.metricMap.Store(newMetricMap)
 
@@ -82,8 +82,8 @@ func (pi *Index) MetricMap() map[index.Metric]string {
 	return pi.metricMap.Load().(map[index.Metric]string)
 }
 
-func (pi *Index) index() *postings.Index {
-	return pi.idx.Load().(*postings.Index)
+func (pi *Index) index() *postings.CompressedIndex {
+	return pi.idx.Load().(*postings.CompressedIndex)
 }
 
 func (pi *Index) docToMetricMap() map[postings.DocID]index.Metric {
