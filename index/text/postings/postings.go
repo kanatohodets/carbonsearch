@@ -8,10 +8,12 @@ import (
 	"github.com/kanatohodets/carbonsearch/index"
 	"github.com/kanatohodets/carbonsearch/index/text/document"
 
-	"github.com/dgryski/go-postings"
+	// experimenting with reusing the idx for subsequent writes after emptying it out
+	"github.com/kanatohodets/go-postings"
 )
 
 type Index struct {
+	writeIdx  *postings.Index
 	idx       atomic.Value //*postings.CompressedIndex
 	docMetric atomic.Value //map[postings.DocID]index.Metric
 	metricMap atomic.Value //map[index.Metric]string
@@ -20,6 +22,7 @@ type Index struct {
 func NewIndex() *Index {
 	pi := &Index{}
 
+	pi.writeIdx = postings.NewIndex(nil)
 	pi.idx.Store(&postings.CompressedIndex{})
 	pi.metricMap.Store(map[index.Metric]string{})
 	pi.docMetric.Store(map[postings.DocID]index.Metric{})
@@ -50,7 +53,6 @@ func (pi *Index) Query(tokens []uint32) ([]index.Metric, error) {
 }
 
 func (pi *Index) Materialize(rawMetrics []string) int {
-	newIdx := postings.NewIndex(nil)
 	newDocToMetric := map[postings.DocID]index.Metric{}
 	newMetricMap := map[index.Metric]string{}
 
@@ -61,15 +63,16 @@ func (pi *Index) Materialize(rawMetrics []string) int {
 		if err != nil {
 			panic(fmt.Sprintf("%v: cannot tokenize %q: %v", pi.Name(), metric, err))
 		}
-		docID := newIdx.AddDocument(unsafeTermIDSlice(tokens))
+		docID := pi.writeIdx.AddDocument(unsafeTermIDSlice(tokens))
 		newDocToMetric[docID] = metric
 		newMetricMap[metric] = rawMetric
 	}
 
-	pi.idx.Store(postings.NewCompressedIndex(newIdx))
+	pi.idx.Store(postings.NewCompressedIndex(pi.writeIdx))
 	pi.docMetric.Store(newDocToMetric)
 	pi.metricMap.Store(newMetricMap)
 
+	pi.writeIdx.Empty()
 	return len(rawMetrics)
 }
 
