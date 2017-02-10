@@ -447,6 +447,11 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/debug/vars", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/heap", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/profile", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/block", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/trace", http.DefaultServeMux)
+
 	mux.Handle("/metrics/find/",
 		gziphandler.GzipHandler(
 			loggingHandler(
