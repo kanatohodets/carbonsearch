@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -502,6 +503,7 @@ func main() {
 			}
 		}
 		stopMaterialize <- true
+		debug.FreeOSMemory()
 		return nil
 	}
 	err = gracehttp.ServeWithOptions(
