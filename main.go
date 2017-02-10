@@ -438,9 +438,15 @@ func main() {
 	db.MaterializeIndexes()
 	logger.Logf("first materialization complete in %v, further materializations will occur per the rotation rate", time.Since(materializeStart))
 
+	stopMaterialize := make(chan bool)
 	go func() {
 		for {
-			time.Sleep(rotationRate)
+			select {
+			case <-stopMaterialize:
+				return
+			case <-time.After(rotationRate):
+				break
+			}
 			db.MaterializeIndexes()
 		}
 	}()
@@ -488,12 +494,14 @@ func main() {
 	logger.Logf("listening on %s\n", portStr)
 
 	beforeRestart := func() error {
+		logger.Logf("restart triggered, stopping consumers and halting materialization")
 		for _, consumer := range consumers {
 			err := consumer.Stop()
 			if err != nil {
 				logger.Logf("Failed to close consumer %s: %s", consumer.Name(), err)
 			}
 		}
+		stopMaterialize <- true
 		return nil
 	}
 	err = gracehttp.ServeWithOptions(
