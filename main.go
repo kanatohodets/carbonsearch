@@ -446,9 +446,8 @@ func main() {
 			case <-stopMaterialize:
 				return
 			case <-time.After(rotationRate):
-				break
+				db.MaterializeIndexes()
 			}
-			db.MaterializeIndexes()
 		}
 	}()
 
