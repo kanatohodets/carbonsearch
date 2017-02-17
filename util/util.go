@@ -6,7 +6,7 @@ import (
 	"io/ioutil"
 	"strconv"
 
-	"github.com/dchest/siphash"
+	"github.com/dgryski/go-sip13"
 	"gopkg.in/yaml.v2"
 )
 
@@ -89,5 +89,5 @@ func ReadConfig(path string, dest interface{}) error {
 }
 
 func HashStr64(data string) uint64 {
-	return siphash.Hash(0, 0, []byte(data))
+	return sip13.Sum64Str(0, 0, data)
 }
