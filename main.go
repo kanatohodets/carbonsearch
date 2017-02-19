@@ -7,6 +7,7 @@ import (
 	"expvar"
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"net/url"
@@ -32,8 +33,8 @@ import (
 	"github.com/dgryski/httputil"
 
 	"github.com/NYTimes/gziphandler"
+	"github.com/facebookgo/grace/gracehttp"
 	"github.com/gogo/protobuf/proto"
-	"github.com/kanatohodets/grace/gracehttp"
 	"github.com/peterbourgon/g2g"
 )
 
@@ -505,13 +506,16 @@ func main() {
 		debug.FreeOSMemory()
 		return nil
 	}
+
+	// need to set this logger as long as mlog doesn't meet the Logger interface
+	gracehttp.SetLogger(log.New(os.Stderr, "", log.LstdFlags))
 	err = gracehttp.ServeWithOptions(
 		[]*http.Server{
 			&http.Server{Addr: portStr, Handler: mux},
 		},
 		// before starting the new process, shut down consumers, stop indexing into the old instance
 		// this is important particularly for the HTTP consumer, since it frees up the port for the new carbonsearch
-		gracehttp.StartupHook(beforeRestart),
+		gracehttp.PreStartProcess(beforeRestart),
 	)
 
 	if err != nil {
