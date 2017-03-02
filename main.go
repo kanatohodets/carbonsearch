@@ -68,13 +68,7 @@ var Config = struct {
 	IndexRotationRate: "60s",
 }
 
-var db *database.Database
-
-var stats *util.Stats
-
 var logger mlog.Level
-
-var virtPrefix string
 
 var timeBuckets []int64
 
@@ -86,6 +80,10 @@ func (b bucketEntry) String() string {
 
 func renderTimeBuckets() interface{} {
 	return timeBuckets
+}
+
+func initTimeBuckets(bucketCount int) {
+	timeBuckets = make([]int64, bucketCount)
 }
 
 func bucketRequestTimes(req *http.Request, t time.Duration) {
@@ -103,160 +101,208 @@ func bucketRequestTimes(req *http.Request, t time.Duration) {
 	}
 }
 
-// virt.v1.*.serv*
-// -> serv*
-func handleAutocomplete(rawQuery, trimmedQuery string) (pb3.GlobResponse, error) {
-	tags := strings.Split(trimmedQuery, ".")
-	completionTag := tags[len(tags)-1]
-	completions := db.Autocomplete(completionTag)
-	var result pb3.GlobResponse
+func makeFindHandler(db *database.Database, stats *util.Stats, virtPrefix string) http.HandlerFunc {
+	// virt.v1.*.serv*
+	// -> serv*
+	handleAutocomplete := func(rawQuery, trimmedQuery string) (pb3.GlobResponse, error) {
+		tags := strings.Split(trimmedQuery, ".")
+		completionTag := tags[len(tags)-1]
+		completions := db.Autocomplete(completionTag)
+		var result pb3.GlobResponse
 
-	result.Name = rawQuery
-	result.Matches = make([]*pb3.GlobMatch, 0, len(completions))
-	base := fmt.Sprintf("%s%s", virtPrefix, strings.Join(tags[:len(tags)-1], "."))
-	base = strings.TrimSuffix(base, ".")
-	for _, completion := range completions {
-		full := fmt.Sprintf("%s.%s", base, completion)
-		result.Matches = append(result.Matches, &pb3.GlobMatch{Path: full, IsLeaf: true})
+		result.Name = rawQuery
+		result.Matches = make([]*pb3.GlobMatch, 0, len(completions))
+		base := fmt.Sprintf("%s%s", virtPrefix, strings.Join(tags[:len(tags)-1], "."))
+		base = strings.TrimSuffix(base, ".")
+		for _, completion := range completions {
+			full := fmt.Sprintf("%s.%s", base, completion)
+			result.Matches = append(result.Matches, &pb3.GlobMatch{Path: full, IsLeaf: true})
+		}
+
+		return result, nil
 	}
 
-	return result, nil
+	handleQuery := func(rawQuery string, query map[string][]string) (pb3.GlobResponse, error) {
+		metrics, err := db.Query(query)
+		var result pb3.GlobResponse
+		if err != nil {
+			return result, err
+		}
+
+		result.Name = rawQuery
+		result.Matches = make([]*pb3.GlobMatch, 0, len(metrics))
+		for _, metric := range metrics {
+			result.Matches = append(result.Matches, &pb3.GlobMatch{Path: metric, IsLeaf: true})
+		}
+
+		return result, nil
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		uri, _ := url.ParseRequestURI(req.URL.RequestURI())
+		uriQuery := uri.Query()
+		start := time.Now()
+
+		stats.QueriesHandled.Add(1)
+		queries := uriQuery["query"]
+		if len(queries) != 1 {
+			err := fmt.Errorf("req validation: there must be exactly one 'query' url param")
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		formats := uriQuery["format"]
+		if len(formats) != 1 {
+			err := fmt.Errorf("req validation: there must be exactly one 'format' url param")
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		format := formats[0]
+		if format != "protobuf3" && format != "protobuf" && format != "json" {
+			err := fmt.Errorf("main: %q is not a recognized format: known formats are 'protobuf3', 'protobuf', and 'json'", format)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		rawQuery := queries[0]
+		if !strings.HasPrefix(rawQuery, virtPrefix) {
+			err := fmt.Errorf("main: the query is not a valid virtual metric (must start with %q): %s", virtPrefix, rawQuery)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		trimmedQuery := strings.TrimPrefix(rawQuery, virtPrefix)
+
+		var result pb3.GlobResponse
+		// query = serv*
+		// query = *
+		// query = servers-*
+		// query = servers-stat*
+		// query = servers-status:*
+		// query = servers-status:live.*
+		if strings.HasSuffix(trimmedQuery, "*") {
+			var err error
+			result, err = handleAutocomplete(rawQuery, trimmedQuery)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			logger.Logf("autocomplete: %q returned %v options in %v", trimmedQuery, len(result.Matches), time.Since(start))
+		} else {
+			queryTags, err := db.ParseQuery(trimmedQuery)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			result, err = handleQuery(rawQuery, queryTags)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			logger.Logf("search: %q returned %v metrics in %v", trimmedQuery, len(result.Matches), time.Since(start))
+		}
+
+		switch format {
+		case "protobuf3":
+			w.Header().Set("Content-Type", "application/x-protobuf")
+			b, _ := result.Marshal()
+			_, err := w.Write(b)
+			if err != nil {
+				logger.Logf("error writing protobuf3 response body %q", err)
+			}
+
+		case "protobuf":
+			w.Header().Set("Content-Type", "application/x-protobuf")
+			var resultPb2 pb2.GlobResponse
+			var matches []*pb2.GlobMatch
+			for i := range result.Matches {
+				matches = append(matches, &pb2.GlobMatch{
+					Path:   &result.Matches[i].Path,
+					IsLeaf: &result.Matches[i].IsLeaf,
+				})
+			}
+			resultPb2.Name = &result.Name
+			resultPb2.Matches = matches
+			b, _ := resultPb2.Marshal()
+			_, err := w.Write(b)
+			if err != nil {
+				logger.Logf("error writing protobuf response body %q", err)
+			}
+
+		case "json":
+			w.Header().Set("Content-Type", "application/json")
+			enc := json.NewEncoder(w)
+			err := enc.Encode(result)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		}
+	})
 }
 
-func handleQuery(rawQuery string, query map[string][]string) (pb3.GlobResponse, error) {
-	metrics, err := db.Query(query)
-	var result pb3.GlobResponse
-	if err != nil {
-		return result, err
-	}
-
-	result.Name = rawQuery
-	result.Matches = make([]*pb3.GlobMatch, 0, len(metrics))
-	for _, metric := range metrics {
-		result.Matches = append(result.Matches, &pb3.GlobMatch{Path: metric, IsLeaf: true})
-	}
-
-	return result, nil
-}
-
-func findHandler(w http.ResponseWriter, req *http.Request) {
-	uri, _ := url.ParseRequestURI(req.URL.RequestURI())
-	uriQuery := uri.Query()
-	start := time.Now()
-
-	stats.QueriesHandled.Add(1)
-	queries := uriQuery["query"]
-	if len(queries) != 1 {
-		err := fmt.Errorf("req validation: there must be exactly one 'query' url param")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	formats := uriQuery["format"]
-	if len(formats) != 1 {
-		err := fmt.Errorf("req validation: there must be exactly one 'format' url param")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	format := formats[0]
-	if format != "protobuf3" && format != "protobuf" && format != "json" {
-		err := fmt.Errorf("main: %q is not a recognized format: known formats are 'protobuf' and 'json'", format)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	rawQuery := queries[0]
-	if !strings.HasPrefix(rawQuery, virtPrefix) {
-		err := fmt.Errorf("main: the query is not a valid virtual metric (must start with %q): %s", virtPrefix, rawQuery)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	trimmedQuery := strings.TrimPrefix(rawQuery, virtPrefix)
-
-	var result pb3.GlobResponse
-	// query = serv*
-	// query = *
-	// query = servers-*
-	// query = servers-stat*
-	// query = servers-status:*
-	// query = servers-status:live.*
-	if strings.HasSuffix(trimmedQuery, "*") {
-		var err error
-		result, err = handleAutocomplete(rawQuery, trimmedQuery)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		logger.Logf("autocomplete: %q returned %v options in %v", trimmedQuery, len(result.Matches), time.Since(start))
-	} else {
-		queryTags, err := db.ParseQuery(trimmedQuery)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		result, err = handleQuery(rawQuery, queryTags)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		logger.Logf("search: %q returned %v metrics in %v", trimmedQuery, len(result.Matches), time.Since(start))
-	}
-
-	switch format {
-	case "protobuf3":
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		b, _ := result.Marshal()
-		_, err := w.Write(b)
-		if err != nil {
-			logger.Logf("error writing protobuf3 response body %q", err)
-		}
-
-	case "protobuf":
-		w.Header().Set("Content-Type", "application/x-protobuf")
-		var resultPb2 pb2.GlobResponse
-		var matches []*pb2.GlobMatch
-		for i := range result.Matches {
-			matches = append(matches, &pb2.GlobMatch{
-				Path: &result.Matches[i].Path,
-				IsLeaf: &result.Matches[i].IsLeaf,
-			})
-		}
-		resultPb2.Name = &result.Name
-		resultPb2.Matches = matches
-		b, _ := resultPb2.Marshal()
-		_, err := w.Write(b)
-		if err != nil {
-			logger.Logf("error writing protobuf response body %q", err)
-		}
-	case "json":
+func makeTocHandler(db *database.Database, stats *util.Stats, virtPrefix string) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
-		err := enc.Encode(result)
+		err := enc.Encode(db.TableOfContents())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-	}
+	})
 }
 
-func tocHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	err := enc.Encode(db.TableOfContents())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+func makeMetricListHandler(db *database.Database, stats *util.Stats, virtPrefix string) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		err := enc.Encode(db.MetricList())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 }
 
-func metricListHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	enc := json.NewEncoder(w)
-	err := enc.Encode(db.MetricList())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+func createMux(db *database.Database, stats *util.Stats, virtPrefix string) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/debug/vars", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/heap", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/profile", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/block", http.DefaultServeMux)
+	mux.Handle("/debug/pprof/trace", http.DefaultServeMux)
+
+	mux.Handle("/metrics/find/",
+		gziphandler.GzipHandler(
+			loggingHandler(
+				httputil.TrackConnections(
+					httputil.TimeHandler(makeFindHandler(db, stats, virtPrefix), bucketRequestTimes),
+				),
+			),
+		),
+	)
+
+	mux.Handle("/admin/toc/",
+		gziphandler.GzipHandler(
+			loggingHandler(
+				httputil.TrackConnections(
+					httputil.TimeHandler(makeTocHandler(db, stats, virtPrefix), bucketRequestTimes),
+				),
+			),
+		),
+	)
+
+	mux.Handle("/admin/metric_list/",
+		gziphandler.GzipHandler(
+			loggingHandler(
+				httputil.TrackConnections(
+					httputil.TimeHandler(makeMetricListHandler(db, stats, virtPrefix), bucketRequestTimes),
+				),
+			),
+		),
+	)
+
+	return mux
 }
 
 func main() {
@@ -307,7 +353,7 @@ func main() {
 		printErrorAndExit(1, "config error: 'prefix' must terminate with '.'. The current value is: %q", Config.Prefix)
 	}
 
-	virtPrefix = Config.Prefix
+	virtPrefix := Config.Prefix
 
 	strikes := 0
 	if len(Config.SplitIndexes) == 0 {
@@ -333,10 +379,10 @@ func main() {
 		printErrorAndExit(1, "config doesn't have any consumers. carbonsearch won't have anything to search on. Take a peek in %q, see if it looks like it should", *configPath)
 	}
 
-	stats = util.InitStats()
+	stats := util.InitStats()
 
 	// +1 to track every over the number of buckets we track
-	timeBuckets = make([]int64, Config.Buckets+1)
+	initTimeBuckets(Config.Buckets + 1)
 
 	// nothing in the config? check the environment
 	if Config.GraphiteHost == "" {
@@ -394,7 +440,7 @@ func main() {
 
 	}
 
-	db = database.New(
+	db := database.New(
 		Config.QueryLimit,
 		Config.ResultLimit,
 		Config.FullIndexService,
@@ -471,43 +517,6 @@ func main() {
 		}
 	}()
 
-	mux := http.NewServeMux()
-	mux.Handle("/debug/vars", http.DefaultServeMux)
-	mux.Handle("/debug/pprof/heap", http.DefaultServeMux)
-	mux.Handle("/debug/pprof/profile", http.DefaultServeMux)
-	mux.Handle("/debug/pprof/block", http.DefaultServeMux)
-	mux.Handle("/debug/pprof/trace", http.DefaultServeMux)
-
-	mux.Handle("/metrics/find/",
-		gziphandler.GzipHandler(
-			loggingHandler(
-				httputil.TrackConnections(
-					httputil.TimeHandler(http.HandlerFunc(findHandler), bucketRequestTimes),
-				),
-			),
-		),
-	)
-
-	mux.Handle("/admin/toc/",
-		gziphandler.GzipHandler(
-			loggingHandler(
-				httputil.TrackConnections(
-					httputil.TimeHandler(http.HandlerFunc(tocHandler), bucketRequestTimes),
-				),
-			),
-		),
-	)
-
-	mux.Handle("/admin/metric_list/",
-		gziphandler.GzipHandler(
-			loggingHandler(
-				httputil.TrackConnections(
-					httputil.TimeHandler(http.HandlerFunc(metricListHandler), bucketRequestTimes),
-				),
-			),
-		),
-	)
-
 	portStr := fmt.Sprintf(":%d", Config.Port)
 	expvar.NewString("BuildVersion").Set(BuildVersion)
 	logger.Logln("Starting carbonsearch", BuildVersion)
@@ -525,6 +534,8 @@ func main() {
 		debug.FreeOSMemory()
 		return nil
 	}
+
+	mux := createMux(db, stats, virtPrefix)
 
 	// need to set this logger as long as mlog doesn't meet the Logger interface
 	gracehttp.SetLogger(log.New(os.Stderr, "", log.LstdFlags))
