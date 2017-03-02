@@ -27,14 +27,14 @@ import (
 	"github.com/kanatohodets/carbonsearch/database"
 	"github.com/kanatohodets/carbonsearch/util"
 
-	pb "github.com/dgryski/carbonzipper/carbonzipperpb"
+	pb2 "github.com/dgryski/carbonzipper/carbonzipperpb"
+	pb3 "github.com/dgryski/carbonzipper/carbonzipperpb3"
 	"github.com/dgryski/carbonzipper/mlog"
 	"github.com/dgryski/carbonzipper/mstats"
 	"github.com/dgryski/httputil"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/facebookgo/grace/gracehttp"
-	"github.com/gogo/protobuf/proto"
 	"github.com/peterbourgon/g2g"
 )
 
@@ -105,35 +105,35 @@ func bucketRequestTimes(req *http.Request, t time.Duration) {
 
 // virt.v1.*.serv*
 // -> serv*
-func handleAutocomplete(rawQuery, trimmedQuery string) (pb.GlobResponse, error) {
+func handleAutocomplete(rawQuery, trimmedQuery string) (pb3.GlobResponse, error) {
 	tags := strings.Split(trimmedQuery, ".")
 	completionTag := tags[len(tags)-1]
 	completions := db.Autocomplete(completionTag)
-	var result pb.GlobResponse
+	var result pb3.GlobResponse
 
-	result.Name = &rawQuery
-	result.Matches = make([]*pb.GlobMatch, 0, len(completions))
+	result.Name = rawQuery
+	result.Matches = make([]*pb3.GlobMatch, 0, len(completions))
 	base := fmt.Sprintf("%s%s", virtPrefix, strings.Join(tags[:len(tags)-1], "."))
 	base = strings.TrimSuffix(base, ".")
 	for _, completion := range completions {
 		full := fmt.Sprintf("%s.%s", base, completion)
-		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(full), IsLeaf: proto.Bool(true)})
+		result.Matches = append(result.Matches, &pb3.GlobMatch{Path: full, IsLeaf: true})
 	}
 
 	return result, nil
 }
 
-func handleQuery(rawQuery string, query map[string][]string) (pb.GlobResponse, error) {
+func handleQuery(rawQuery string, query map[string][]string) (pb3.GlobResponse, error) {
 	metrics, err := db.Query(query)
-	var result pb.GlobResponse
+	var result pb3.GlobResponse
 	if err != nil {
 		return result, err
 	}
 
-	result.Name = &rawQuery
-	result.Matches = make([]*pb.GlobMatch, 0, len(metrics))
+	result.Name = rawQuery
+	result.Matches = make([]*pb3.GlobMatch, 0, len(metrics))
 	for _, metric := range metrics {
-		result.Matches = append(result.Matches, &pb.GlobMatch{Path: proto.String(metric), IsLeaf: proto.Bool(true)})
+		result.Matches = append(result.Matches, &pb3.GlobMatch{Path: metric, IsLeaf: true})
 	}
 
 	return result, nil
@@ -160,7 +160,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	format := formats[0]
-	if format != "protobuf" && format != "json" {
+	if format != "protobuf3" && format != "protobuf" && format != "json" {
 		err := fmt.Errorf("main: %q is not a recognized format: known formats are 'protobuf' and 'json'", format)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -175,7 +175,7 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 
 	trimmedQuery := strings.TrimPrefix(rawQuery, virtPrefix)
 
-	var result pb.GlobResponse
+	var result pb3.GlobResponse
 	// query = serv*
 	// query = *
 	// query = servers-*
@@ -205,14 +205,33 @@ func findHandler(w http.ResponseWriter, req *http.Request) {
 		logger.Logf("search: %q returned %v metrics in %v", trimmedQuery, len(result.Matches), time.Since(start))
 	}
 
-	if format == "protobuf" {
+	switch format {
+	case "protobuf3":
 		w.Header().Set("Content-Type", "application/x-protobuf")
 		b, _ := result.Marshal()
 		_, err := w.Write(b)
 		if err != nil {
+			logger.Logf("error writing protobuf3 response body %q", err)
+		}
+
+	case "protobuf":
+		w.Header().Set("Content-Type", "application/x-protobuf")
+		var resultPb2 pb2.GlobResponse
+		var matches []*pb2.GlobMatch
+		for i := range result.Matches {
+			matches = append(matches, &pb2.GlobMatch{
+				Path: &result.Matches[i].Path,
+				IsLeaf: &result.Matches[i].IsLeaf,
+			})
+		}
+		resultPb2.Name = &result.Name
+		resultPb2.Matches = matches
+		b, _ := resultPb2.Marshal()
+		_, err := w.Write(b)
+		if err != nil {
 			logger.Logf("error writing protobuf response body %q", err)
 		}
-	} else if format == "json" {
+	case "json":
 		w.Header().Set("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
 		err := enc.Encode(result)
