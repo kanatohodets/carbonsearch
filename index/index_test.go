@@ -154,6 +154,18 @@ func BenchmarkIntersectMetricsSmallListLargeSets(b *testing.B) {
 	}
 }
 
+func BenchmarkIntersectMetricsSmallListLargeSetsOneEmpty(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10000))
+	}
+	metricSets = append(metricSets, []Metric{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		IntersectMetrics(metricSets)
+	}
+}
+
 func BenchmarkIntersectMetricsLargeListSmallSets(b *testing.B) {
 	metricSets := make([][]Metric, 300)
 	for i, _ := range metricSets {

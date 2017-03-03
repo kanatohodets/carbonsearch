@@ -114,13 +114,13 @@ func UnionMetrics(metricSets [][]Metric) []Metric {
 
 func IntersectMetrics(metricSets [][]Metric) []Metric {
 	if len(metricSets) == 0 {
-		return []Metric{}
+		return nil
 	}
 
 	for _, list := range metricSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
-			return []Metric{}
+			return nil
 		}
 
 		if Debug {
@@ -210,13 +210,13 @@ func UnionTags(tagSets [][]Tag) []Tag {
 
 func IntersectTags(tagSets [][]Tag) []Tag {
 	if len(tagSets) == 0 {
-		return []Tag{}
+		return nil
 	}
 
 	for _, list := range tagSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
-			return []Tag{}
+			return nil
 		}
 
 		if Debug {

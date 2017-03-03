@@ -252,13 +252,13 @@ func (h *JoinSetsHeap) Pop() interface{} {
 
 func IntersectJoins(joinSets [][]Join) []Join {
 	if len(joinSets) == 0 {
-		return []Join{}
+		return nil
 	}
 
 	for _, list := range joinSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
-			return []Join{}
+			return nil
 		}
 	}
 
