@@ -1,3 +1,13 @@
+### v0.16.0 - March 2, 2017
+---
+##### Features
+* Support for protobuf3
+
+##### Misc/Bugs
+* siphash -> sip13 for hashing tags/metrics (minor performance improvement)
+* fix missing pprof HTTP routes (`/debug/pprof/{heap|profile|block|trace}`)
+* stop materializing and release memory back to the OS once graceful restart is triggered: this creates space for the new instance to load up
+
 ### v0.15.0 - Feb 6, 2017
 ---
 ##### Features
