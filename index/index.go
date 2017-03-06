@@ -165,6 +165,43 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 	}
 }
 
+func PairwiseIntersectMetrics(metricSets [][]Metric) []Metric {
+	if len(metricSets) == 0 {
+		return nil
+	}
+
+	iters := make([]iterator, len(metricSets))
+	freq := make([]int, len(metricSets))
+	for i, list := range metricSets {
+		// any empty set --> empty intersection
+		if len(list) == 0 {
+			return nil
+		}
+		iters[i] = newIter(list)
+		freq[i] = len(list)
+
+		if Debug {
+			if !sort.IsSorted(MetricSlice(list)) {
+				panic("IntersectMetrics: passed unsorted slice")
+			}
+		}
+	}
+	tf := tfList{freq, iters}
+	sort.Sort(tf)
+
+	result := make(postings, freq[0])
+	var docs iterator = iters[0]
+	for _, t := range iters[1:] {
+		result = intersect(result[:0], docs, t)
+		if len(result) == 0 {
+			return nil
+		}
+		docs = newIter(result)
+	}
+
+	return []Metric(result)
+}
+
 func SortTags(tags []Tag) {
 	sort.Sort(TagSlice(tags))
 }

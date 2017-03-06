@@ -166,6 +166,18 @@ func BenchmarkIntersectMetricsSmallListLargeSetsOneEmpty(b *testing.B) {
 	}
 }
 
+func BenchmarkIntersectMetricsSmallListOneLargeSet(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(100))
+	}
+	metricSets = append(metricSets, HashMetrics(test.GetMetricCorpus(100000)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		IntersectMetrics(metricSets)
+	}
+}
+
 func BenchmarkIntersectMetricsLargeListSmallSets(b *testing.B) {
 	metricSets := make([][]Metric, 300)
 	for i, _ := range metricSets {
@@ -175,6 +187,67 @@ func BenchmarkIntersectMetricsLargeListSmallSets(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		IntersectMetrics(metricSets)
+	}
+}
+
+// pairwise
+func BenchmarkPairwiseIntersectMetricsSmallListSmallSets(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PairwiseIntersectMetrics(metricSets)
+	}
+}
+
+func BenchmarkPairwiseIntersectMetricsSmallListLargeSets(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10000))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PairwiseIntersectMetrics(metricSets)
+	}
+}
+
+func BenchmarkPairwiseIntersectMetricsLargeListSmallSets(b *testing.B) {
+	metricSets := make([][]Metric, 300)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10))
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PairwiseIntersectMetrics(metricSets)
+	}
+}
+
+func BenchmarkPairwiseIntersectMetricsSmallListLargeSetsOneEmpty(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(10000))
+	}
+	metricSets = append(metricSets, []Metric{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PairwiseIntersectMetrics(metricSets)
+	}
+}
+
+func BenchmarkPairwiseIntersectMetricsSmallListOneLargeSet(b *testing.B) {
+	metricSets := make([][]Metric, 3)
+	for i, _ := range metricSets {
+		metricSets[i] = HashMetrics(test.GetMetricCorpus(100))
+	}
+	metricSets = append(metricSets, HashMetrics(test.GetMetricCorpus(100000)))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		PairwiseIntersectMetrics(metricSets)
 	}
 }
 
