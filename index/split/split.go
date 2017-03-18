@@ -63,7 +63,6 @@ return final intersected set
 */
 
 import (
-	"container/heap"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -232,67 +231,43 @@ func SortJoins(joins []Join) {
 	sort.Sort(JoinSlice(joins))
 }
 
-type JoinSetsHeap [][]Join
-
-func (h JoinSetsHeap) Len() int           { return len(h) }
-func (h JoinSetsHeap) Less(i, j int) bool { return h[i][0] < h[j][0] }
-func (h JoinSetsHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h *JoinSetsHeap) Push(x interface{}) {
-	t := x.([]Join)
-	*h = append(*h, t)
-}
-
-func (h *JoinSetsHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
-}
-
 func IntersectJoins(joinSets [][]Join) []Join {
 	if len(joinSets) == 0 {
 		return nil
 	}
 
-	for _, list := range joinSets {
+	if len(joinSets) == 1 {
+		return joinSets[0]
+	}
+
+	iters := make([]joinIterator, len(joinSets))
+	freq := make([]int, len(joinSets))
+	for i, list := range joinSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return nil
 		}
-	}
+		iters[i] = newJoinIter(list)
+		freq[i] = len(list)
 
-	h := JoinSetsHeap(joinSets)
-	heap.Init(&h)
-	set := []Join{}
-	for {
-		cur := h[0]
-		smallestJoin := cur[0]
-		present := 0
-		for _, candidate := range h {
-			if candidate[0] == smallestJoin {
-				present++
-			} else {
-				// any further matches will be purged by the fixup loop
-				break
+		if index.Debug {
+			if !sort.IsSorted(JoinSlice(list)) {
+				panic("IntersectJoins: passed unsorted slice")
 			}
-		}
-
-		// found something in every subset
-		if present == len(joinSets) {
-			if len(set) == 0 || set[len(set)-1] != smallestJoin {
-				set = append(set, smallestJoin)
-			}
-		}
-
-		for h[0][0] == smallestJoin {
-			list := h[0]
-			if len(list) == 1 {
-				return set
-			}
-
-			h[0] = list[1:]
-			heap.Fix(&h, 0)
 		}
 	}
+	tf := joinTfList{freq, iters}
+	sort.Sort(tf)
+
+	result := make(joinPostings, freq[0])
+	var docs joinIterator = iters[0]
+	for _, t := range iters[1:] {
+		result = intersectJoinSetPair(result[:0], docs, t)
+		if len(result) == 0 {
+			return nil
+		}
+		docs = newJoinIter(result)
+	}
+
+	return []Join(result)
 }

@@ -117,67 +117,18 @@ func IntersectMetrics(metricSets [][]Metric) []Metric {
 		return nil
 	}
 
-	for _, list := range metricSets {
-		// any empty set --> empty intersection
-		if len(list) == 0 {
-			return nil
-		}
-
-		if Debug {
-			if !sort.IsSorted(MetricSlice(list)) {
-				panic("IntersectMetrics: passed unsorted slice")
-			}
-		}
+	if len(metricSets) == 1 {
+		return metricSets[0]
 	}
 
-	h := MetricSetsHeap(metricSets)
-	heap.Init(&h)
-	set := []Metric{}
-	for {
-		cur := h[0]
-		smallestMetric := cur[0]
-		present := 0
-		for _, candidate := range h {
-			if candidate[0] == smallestMetric {
-				present++
-			} else {
-				// any further matches will be purged by the fixup loop
-				break
-			}
-		}
-
-		// found something in every subset
-		if present == len(metricSets) {
-			if len(set) == 0 || set[len(set)-1] != smallestMetric {
-				set = append(set, smallestMetric)
-			}
-		}
-
-		for h[0][0] == smallestMetric {
-			list := h[0]
-			if len(list) == 1 {
-				return set
-			}
-
-			h[0] = list[1:]
-			heap.Fix(&h, 0)
-		}
-	}
-}
-
-func PairwiseIntersectMetrics(metricSets [][]Metric) []Metric {
-	if len(metricSets) == 0 {
-		return nil
-	}
-
-	iters := make([]iterator, len(metricSets))
+	iters := make([]metricIterator, len(metricSets))
 	freq := make([]int, len(metricSets))
 	for i, list := range metricSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return nil
 		}
-		iters[i] = newIter(list)
+		iters[i] = newMetricIter(list)
 		freq[i] = len(list)
 
 		if Debug {
@@ -186,17 +137,17 @@ func PairwiseIntersectMetrics(metricSets [][]Metric) []Metric {
 			}
 		}
 	}
-	tf := tfList{freq, iters}
+	tf := metricTfList{freq, iters}
 	sort.Sort(tf)
 
-	result := make(postings, freq[0])
-	var docs iterator = iters[0]
+	result := make(metricPostings, freq[0])
+	var docs metricIterator = iters[0]
 	for _, t := range iters[1:] {
-		result = intersect(result[:0], docs, t)
+		result = intersectMetricSetPair(result[:0], docs, t)
 		if len(result) == 0 {
 			return nil
 		}
-		docs = newIter(result)
+		docs = newMetricIter(result)
 	}
 
 	return []Metric(result)
@@ -250,50 +201,38 @@ func IntersectTags(tagSets [][]Tag) []Tag {
 		return nil
 	}
 
-	for _, list := range tagSets {
+	if len(tagSets) == 1 {
+		return tagSets[0]
+	}
+
+	iters := make([]tagIterator, len(tagSets))
+	freq := make([]int, len(tagSets))
+	for i, list := range tagSets {
 		// any empty set --> empty intersection
 		if len(list) == 0 {
 			return nil
 		}
+		iters[i] = newTagIter(list)
+		freq[i] = len(list)
 
 		if Debug {
 			if !sort.IsSorted(TagSlice(list)) {
-				panic("IntersectTags: passed unsorted slice")
+				panic("Intersecttags: passed unsorted slice")
 			}
 		}
 	}
+	tf := tagTfList{freq, iters}
+	sort.Sort(tf)
 
-	h := TagSetsHeap(tagSets)
-	heap.Init(&h)
-	set := []Tag{}
-	for {
-		cur := h[0]
-		smallestTag := cur[0]
-		present := 0
-		for _, candidate := range h {
-			if candidate[0] == smallestTag {
-				present++
-			} else {
-				// any further matches will be purged by the fixup loop
-				break
-			}
+	result := make(tagPostings, freq[0])
+	var docs tagIterator = iters[0]
+	for _, t := range iters[1:] {
+		result = intersectTagSetPair(result[:0], docs, t)
+		if len(result) == 0 {
+			return nil
 		}
-
-		// found something in every subset
-		if present == len(tagSets) {
-			if len(set) == 0 || set[len(set)-1] != smallestTag {
-				set = append(set, smallestTag)
-			}
-		}
-
-		for h[0][0] == smallestTag {
-			list := h[0]
-			if len(list) == 1 {
-				return set
-			}
-
-			h[0] = list[1:]
-			heap.Fix(&h, 0)
-		}
+		docs = newTagIter(result)
 	}
+
+	return []Tag(result)
 }
