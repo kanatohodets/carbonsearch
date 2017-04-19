@@ -114,7 +114,7 @@ func (db *Database) Query(tagsByService map[string][]string) ([]string, error) {
 		return nil, err
 	}
 
-	textQueries, ok := tagsByService["text"]
+	textQueries, ok := tagsByService[db.textIndexService]
 	if ok {
 		stringMetrics = db.TextIndex.Filter(textQueries, stringMetrics)
 	}
@@ -304,7 +304,7 @@ func New(
 		toc.AddIndexServiceEntry("full", fullIndex.Name(), fullIndexService)
 	}
 
-	textIndex := text.NewIndex(text.BloomBackend)
+	textIndex := text.NewIndex(text.BloomBackend, textIndexService)
 	if textIndexService != "" {
 		serviceToIndex[textIndexService] = textIndex
 	}

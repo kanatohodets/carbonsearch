@@ -37,6 +37,8 @@ type TextBackend interface {
 type Index struct {
 	backend TextBackend
 
+	textMatchPrefix string
+
 	// reporting
 	readableMetrics uint32
 	writtenMetrics  uint32
@@ -44,7 +46,7 @@ type Index struct {
 	generationTime  int64 // time.Duration
 }
 
-func NewIndex(selectedBackend backendType) *Index {
+func NewIndex(selectedBackend backendType, service string) *Index {
 	var backend TextBackend
 	switch selectedBackend {
 	case BloomBackend:
@@ -53,7 +55,8 @@ func NewIndex(selectedBackend backendType) *Index {
 		panic("no backend selected for text index")
 	}
 	ti := Index{
-		backend: backend,
+		backend:         backend,
+		textMatchPrefix: service + "-match:",
 	}
 	return &ti
 }
@@ -61,8 +64,8 @@ func NewIndex(selectedBackend backendType) *Index {
 func (ti *Index) Query(q *index.Query) ([]index.Metric, error) {
 	searches := []string{}
 	for _, tag := range q.Raw {
-		if strings.HasPrefix(tag, "text-match:") {
-			search := strings.TrimPrefix(tag, "text-match:")
+		if strings.HasPrefix(tag, ti.textMatchPrefix) {
+			search := strings.TrimPrefix(tag, ti.textMatchPrefix)
 			searches = append(searches, search)
 		}
 	}
@@ -98,7 +101,7 @@ func (ti *Index) Filter(textTags, metrics []string) []string {
 	matches := []string{}
 	intersectionCounts := make([]int, len(metrics))
 	for _, tag := range textTags {
-		search := strings.TrimPrefix(tag, "text-match:")
+		search := strings.TrimPrefix(tag, ti.textMatchPrefix)
 		// broken pin -> no possible matches -> empty intersection
 		if search[0] == '$' || search[len(search)-1] == '^' {
 			return []string{}

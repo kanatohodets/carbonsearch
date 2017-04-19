@@ -12,7 +12,7 @@ var service = "tekst"
 var textMatchPrefix = service + "-match:"
 
 func TestQuery(t *testing.T) {
-	ti := NewIndex(testBackend)
+	ti := NewIndex(testBackend, service)
 	metrics := []string{
 		"monitors.was_the_site_up",
 		"user.messing_around_in_test",
@@ -44,7 +44,7 @@ func TestQuery(t *testing.T) {
 		return
 	}
 
-	in := NewIndex(testBackend)
+	in := NewIndex(testBackend, service)
 	metrics = []string{
 		"foox",
 		"bart",
@@ -75,7 +75,7 @@ func TestQuery(t *testing.T) {
 	searchTest(t, "full long metric name", in, []string{"rose.daffodil.cron"}, []string{"rose.daffodil.cron"})
 	searchTest(t, "intersect, not union", in, []string{"kpop", "bazz"}, []string{"kpopbazz"})
 
-	emptyIndex := NewIndex(testBackend)
+	emptyIndex := NewIndex(testBackend, service)
 	searchTest(t, "zero results", emptyIndex, []string{"quxx"}, []string{})
 	searchTest(t, "simple", emptyIndex, []string{"foox"}, []string{})
 }
