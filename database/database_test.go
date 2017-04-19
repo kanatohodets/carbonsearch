@@ -23,7 +23,8 @@ func TestMain(m *testing.M) {
 var queryLimit = 10
 var resultLimit = 10
 var fullService = "custom"
-var textService = "text"
+var textService = "tekst"
+var textMatchPrefix = textService + "-match:"
 var splitIndexes = map[string][]string{
 	"fqdn": []string{"servers"},
 }
@@ -195,7 +196,7 @@ func queryTest(t *testing.T, db *Database, testName string, query string, expect
 	// we don't do this for text queries because they're filtered at the string
 	// level, so sortedness is no longer a viable (or important) property to
 	// maintain
-	if len(parsedQuery["text"]) == 0 {
+	if len(parsedQuery[textService]) == 0 {
 		// ensure results are sorted. breaking this is a symptom that some of the
 		// sets are stored unsorted at some point, which breaks a boatload of
 		// assumptions
@@ -349,12 +350,12 @@ func TestTextQuery(t *testing.T) {
 }
 
 func searchTest(t *testing.T, db *Database, testName string, searches, expected []string) {
-	queryString := "text-match:" + searches[0]
+	queryString := textMatchPrefix + searches[0]
 	for i, search := range searches {
 		if i == 0 {
 			continue
 		}
-		queryString = queryString + ".text-match:" + search
+		queryString = queryString + "." + textMatchPrefix + search
 	}
 	queryTest(t, db, fmt.Sprintf("text test: %v", testName), queryString, expected)
 }
@@ -535,41 +536,41 @@ func TestParseQuery(t *testing.T) {
 func TestParseQueryWithQuotes(t *testing.T) {
 	db := New(queryLimit, resultLimit, fullService, textService, splitIndexes, stats)
 	parseTagsTestCase(t, db, "quotes in query",
-		translateQuotes("text-match:<foo.bar.baz>"),
+		translateQuotes(textMatchPrefix+"<foo.bar.baz>"),
 		map[string][]string{
-			"text": {"text-match:foo.bar.baz"},
+			textService: {textMatchPrefix + "foo.bar.baz"},
 		},
 	)
 
 	parseTagsTestCase(t, db, "quotes in query, multiple tags",
-		translateQuotes("text-match:<foo.bar.baz>.text-match:blorg"),
+		translateQuotes(textMatchPrefix+"<foo.bar.baz>."+textMatchPrefix+"blorg"),
 		map[string][]string{
-			"text": {"text-match:foo.bar.baz", "text-match:blorg"},
+			textService: {textMatchPrefix + "foo.bar.baz", textMatchPrefix + "blorg"},
 		},
 	)
 
 	parseTagsErrorCase(t, db, "double quote open",
-		translateQuotes("text-match:<<foo.bar>"),
-		"database ParseQuery: invalid query (two open quotes in a row): \"text-match:<<foo.bar>\"",
+		translateQuotes(textMatchPrefix+"<<foo.bar>"),
+		"database ParseQuery: invalid query (two open quotes in a row): \""+textMatchPrefix+"<<foo.bar>\"",
 	)
 
 	parseTagsErrorCase(t, db, "double quote close",
-		translateQuotes("text-match:<foo.bar>>"),
-		"database ParseQuery: invalid query (close quote without matching open): \"text-match:<foo.bar>>\"",
+		translateQuotes(textMatchPrefix+"<foo.bar>>"),
+		"database ParseQuery: invalid query (close quote without matching open): \""+textMatchPrefix+"<foo.bar>>\"",
 	)
 
 	parseTagsErrorCase(t, db, "close without any open",
-		translateQuotes("text-match:foo.bar>"),
-		"database ParseQuery: invalid query (close quote without matching open): \"text-match:foo.bar>\"",
+		translateQuotes(textMatchPrefix+"foo.bar>"),
+		"database ParseQuery: invalid query (close quote without matching open): \""+textMatchPrefix+"foo.bar>\"",
 	)
 
 	parseTagsErrorCase(t, db, "hanging quote",
-		translateQuotes("text-match:<foo.bar"),
-		"database ParseQuery: invalid query (hanging quotes): \"text-match:<foo.bar\"",
+		translateQuotes(textMatchPrefix+"<foo.bar"),
+		"database ParseQuery: invalid query (hanging quotes): \""+textMatchPrefix+"<foo.bar\"",
 	)
 
 	parseTagsErrorCase(t, db, "dot outside of quotes",
-		translateQuotes("text-match:blorg.<foo.bar>"),
+		translateQuotes(textMatchPrefix+"blorg.<foo.bar>"),
 		"tag: \"foo.bar\" is an invalid tag, should be: service-key:value",
 	)
 

@@ -140,11 +140,11 @@ func TestValueAutocomplete(t *testing.T) {
 
 func TestTextAutocomplete(t *testing.T) {
 	db := initAutocompleteTest(t)
-	autocompleteTestCase(t, db, "text service", "text*", []string{"text-match:<your_query>"})
-	autocompleteTestCase(t, db, "text service with trailing dash", "text-*", []string{"text-match:<your_query>"})
-	autocompleteTestCase(t, db, "text service with partial 'match'", "text-ma*", []string{"text-match:<your_query>"})
-	autocompleteTestCase(t, db, "text service with full 'match' key, no colon", "text-match*", []string{"text-match:<your_query>"})
-	autocompleteTestCase(t, db, "text service with full match and colon (no more completion, you'd mess with their query)", "text-match:*", []string{})
+	autocompleteTestCase(t, db, "text service", textService+"*", []string{textMatchPrefix + "<your_query>"})
+	autocompleteTestCase(t, db, "text service with trailing dash", textService+"-*", []string{textMatchPrefix + "<your_query>"})
+	autocompleteTestCase(t, db, "text service with partial 'match'", textService+"-ma*", []string{textMatchPrefix + "<your_query>"})
+	autocompleteTestCase(t, db, "text service with full 'match' key, no colon", textService+"-match*", []string{textMatchPrefix + "<your_query>"})
+	autocompleteTestCase(t, db, "text service with full match and colon (no more completion, you'd mess with their query)", textService+"-match:*", []string{})
 }
 
 func TestJunkAutocomplete(t *testing.T) {

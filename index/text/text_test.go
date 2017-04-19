@@ -8,6 +8,8 @@ import (
 )
 
 var testBackend backendType = BloomBackend
+var service = "tekst"
+var textMatchPrefix = service + "-match:"
 
 func TestQuery(t *testing.T) {
 	ti := NewIndex(testBackend)
@@ -23,7 +25,7 @@ func TestQuery(t *testing.T) {
 	wg.Wait()
 
 	q := index.NewQuery([]string{
-		"text-match:nginx",
+		textMatchPrefix + "nginx",
 	})
 	results, err := ti.Query(q)
 	if err != nil {
@@ -81,7 +83,7 @@ func TestQuery(t *testing.T) {
 func searchTest(t *testing.T, testName string, in *Index, searches []string, expectedResults []string) {
 	tags := []string{}
 	for _, search := range searches {
-		tags = append(tags, "text-match:"+search)
+		tags = append(tags, textMatchPrefix+search)
 	}
 
 	query := index.NewQuery(tags)
