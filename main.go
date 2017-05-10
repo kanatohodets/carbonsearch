@@ -285,9 +285,7 @@ func createMux(db *database.Database, stats *util.Stats, virtPrefix string) *htt
 	mux.Handle("/admin/toc/",
 		gziphandler.GzipHandler(
 			loggingHandler(
-				httputil.TrackConnections(
-					httputil.TimeHandler(makeTocHandler(db, stats, virtPrefix), bucketRequestTimes),
-				),
+				httputil.TrackConnections(makeTocHandler(db, stats, virtPrefix)),
 			),
 		),
 	)
@@ -295,9 +293,7 @@ func createMux(db *database.Database, stats *util.Stats, virtPrefix string) *htt
 	mux.Handle("/admin/metric_list/",
 		gziphandler.GzipHandler(
 			loggingHandler(
-				httputil.TrackConnections(
-					httputil.TimeHandler(makeMetricListHandler(db, stats, virtPrefix), bucketRequestTimes),
-				),
+				httputil.TrackConnections(makeMetricListHandler(db, stats, virtPrefix)),
 			),
 		),
 	)
