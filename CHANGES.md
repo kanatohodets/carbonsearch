@@ -1,3 +1,10 @@
+### v0.16.1 - May 26, 2017
+---
+##### Misc/Bugs
+* replace heap-based intersect with pairwise (minor performance improvement)
+* respect `text_index_service` config value everywhere (minor bug fix)
+* stop timing \/admin\/* endpoints (more accurate `requests_in_*_to_*` Graphite metric reporting)
+
 ### v0.16.0 - March 2, 2017
 ---
 ##### Features
